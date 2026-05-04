@@ -34,3 +34,13 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# IDE 설정
+.vscode/
+.idea/
+
+# Claude Code 설정
+.claude/
+
+# 로그 파일
+*.log

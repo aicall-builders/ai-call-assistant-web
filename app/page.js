@@ -1,101 +1,64 @@
-import Image from "next/image";
+'use client';
+
+import Link from 'next/link';
 
 export default function Home() {
   return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-8 row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="https://nextjs.org/icons/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-semibold">
-              app/page.js
-            </code>
-            .
-          </li>
-          <li>Save and see your changes instantly.</li>
-        </ol>
-
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="https://nextjs.org/icons/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:min-w-44"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+    <main className="min-h-screen bg-gradient-to-br from-yellow-50 to-orange-50 flex items-center justify-center p-4">
+      <div className="max-w-2xl w-full">
+        {/* 로고 영역 */}
+        <div className="text-center mb-12">
+          <div className="inline-block bg-yellow-400 text-4xl px-6 py-3 rounded-2xl mb-6">
+            📞
+          </div>
+          <h1 className="text-4xl md:text-5xl font-bold text-gray-900 mb-4">
+            소상공인 AI 통화 비서
+          </h1>
+          <p className="text-lg text-gray-600">
+            바쁘실 때 놓친 전화, AI가 요약해드려요
+          </p>
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-6 flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="https://nextjs.org/icons/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="https://nextjs.org/icons/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="https://nextjs.org/icons/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
-    </div>
+
+        {/* 기능 소개 카드 3개 */}
+        <div className="grid md:grid-cols-3 gap-4 mb-12">
+          <div className="bg-white rounded-xl p-5 shadow-sm hover:shadow-md transition">
+            <div className="text-3xl mb-2">🎙️</div>
+            <h3 className="font-semibold text-gray-900 mb-1">자동 녹음</h3>
+            <p className="text-sm text-gray-600">통화를 자동으로 녹음</p>
+          </div>
+          <div className="bg-white rounded-xl p-5 shadow-sm hover:shadow-md transition">
+            <div className="text-3xl mb-2">✍️</div>
+            <h3 className="font-semibold text-gray-900 mb-1">AI 요약</h3>
+            <p className="text-sm text-gray-600">3줄로 깔끔하게 정리</p>
+          </div>
+          <div className="bg-white rounded-xl p-5 shadow-sm hover:shadow-md transition">
+            <div className="text-3xl mb-2">🔍</div>
+            <h3 className="font-semibold text-gray-900 mb-1">키워드 분석</h3>
+            <p className="text-sm text-gray-600">예약·주문·문의 자동 분류</p>
+          </div>
+        </div>
+
+        {/* CTA 버튼 */}
+        <div className="flex flex-col sm:flex-row gap-3 justify-center">
+          <Link
+            href="/login"
+            className="bg-yellow-400 hover:bg-yellow-500 text-gray-900 font-semibold px-8 py-4 rounded-xl text-center transition shadow-sm"
+          >
+            카카오로 시작하기
+          </Link>
+          <Link
+            href="/dashboard"
+            className="bg-white hover:bg-gray-50 text-gray-700 font-semibold px-8 py-4 rounded-xl text-center border border-gray-200 transition"
+          >
+            대시보드 (테스트용)
+          </Link>
+        </div>
+
+        {/* 풋터 - 백엔드 연결 상태 */}
+        <p className="text-center text-xs text-gray-400 mt-12">
+          API 상태: {process.env.NEXT_PUBLIC_API_BASE_URL ? '✅ 연결됨' : '❌ 미설정'}
+        </p>
+      </div>
+    </main>
   );
 }
