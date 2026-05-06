@@ -133,9 +133,11 @@ export default function CallDetailPage() {
         <header className="bg-white rounded-xl p-6 shadow-sm mb-4">
           <div className="flex items-start justify-between mb-4">
             <div>
-              <div className="text-3xl mb-2">{categoryEmoji}</div>
+              <div className="text-3xl mb-2">{call.caller_category === 'BUSINESS' ? categoryEmoji : '📞'}</div>
               <h1 className="text-xl font-bold text-gray-900 mb-1">
-                {call.caller_number || '발신번호 없음'}
+                {call.caller_category === 'BUSINESS'
+                  ? (call.caller_number || '발신번호 없음')
+                  : (call.caller_number ? '*** ' + call.caller_number.slice(-4) : '통화 녹음 ***')}
               </h1>
               <p className="text-sm text-gray-500">
                 {formatDateTime(call.created_at)} · {formatDuration(call.duration)}
@@ -148,9 +150,9 @@ export default function CallDetailPage() {
             )}
           </div>
 
-          {/* 카테고리 + 감성 뱃지 */}
+          {/* 카테고리(BUSINESS만) + 감성(항상 표시) 뱃지 */}
           <div className="flex flex-wrap gap-2">
-            {call.category && (
+            {call.category && call.caller_category === 'BUSINESS' && (
               <span className="bg-yellow-100 text-yellow-800 text-sm font-semibold px-3 py-1 rounded-full">
                 {categoryEmoji} {call.category}
               </span>
@@ -161,21 +163,25 @@ export default function CallDetailPage() {
               </span>
             )}
           </div>
+        
         </header>
 
-        {/* AI 요약 */}
+        {/* AI 요약 (BUSINESS만 내용 표시, 나머지는 마스킹) */}
         {call.summary && (
           <section className="bg-blue-50 border border-blue-200 rounded-xl p-6 mb-4">
             <h2 className="font-bold text-blue-900 mb-2 flex items-center gap-2">
               <span>📝</span>
               <span>AI 요약</span>
             </h2>
-            <p className="text-gray-800 leading-relaxed">{call.summary}</p>
+            <p className="text-gray-800 leading-relaxed">
+              {call.caller_category === 'BUSINESS'
+                ? call.summary
+                : '🔒 개인정보 보호를 위해 내용이 가려졌습니다'}
+            </p>
           </section>
         )}
-
-        {/* 키워드 */}
-        {keywords.length > 0 && (
+        {/* 키워드 (BUSINESS만 표시) */}
+        {keywords.length > 0 && call.caller_category === 'BUSINESS' && (
           <section className="bg-white rounded-xl p-6 shadow-sm mb-4">
             <h2 className="font-bold text-gray-900 mb-3 flex items-center gap-2">
               <span>🔍</span>
@@ -194,7 +200,7 @@ export default function CallDetailPage() {
           </section>
         )}
 
-        {/* STT 전체 텍스트 */}
+        {/* STT 전체 텍스트 (BUSINESS만 내용 표시, 나머지는 마스킹) */}
         {call.stt_result && (
           <section className="bg-white rounded-xl p-6 shadow-sm mb-4">
             <h2 className="font-bold text-gray-900 mb-3 flex items-center gap-2">
@@ -202,36 +208,48 @@ export default function CallDetailPage() {
               <span>통화 전체 내용</span>
               <span className="text-xs font-normal text-gray-400">(STT 변환)</span>
             </h2>
-            <div className="bg-gray-50 rounded-lg p-4 max-h-96 overflow-y-auto">
-              {call.stt_result.split('\n').map((line, idx) => {
-                // [화자1]: 텍스트 형식 분리
-                const match = line.match(/^\[화자([^\]]+)\]:\s*(.*)$/);
-                if (match) {
-                  const speaker = match[1];
-                  const text = match[2];
-                  const isCustomer = speaker === '1';
-                  return (
-                    <div key={idx} className={`mb-2 flex ${isCustomer ? 'justify-start' : 'justify-end'}`}>
-                      <div className={`max-w-[80%] rounded-lg px-3 py-2 ${
-                        isCustomer
-                          ? 'bg-gray-100 text-gray-900'
-                          : 'bg-yellow-100 text-gray-900'
-                      }`}>
-                        <p className="text-xs text-gray-500 mb-1">
-                          {isCustomer ? '👤 손님' : '🏪 사장님'}
-                        </p>
-                        <p className="text-sm">{text}</p>
+            {call.caller_category === 'BUSINESS' ? (
+              <div className="bg-gray-50 rounded-lg p-4 max-h-96 overflow-y-auto">
+                {call.stt_result.split('\n').map((line, idx) => {
+                  // [화자1]: 텍스트 형식 분리
+                  const match = line.match(/^\[화자([^\]]+)\]:\s*(.*)$/);
+                  if (match) {
+                    const speaker = match[1];
+                    const text = match[2];
+                    const isCustomer = speaker === '1';
+                    return (
+                      <div key={idx} className={`mb-2 flex ${isCustomer ? 'justify-start' : 'justify-end'}`}>
+                        <div className={`max-w-[80%] rounded-lg px-3 py-2 ${
+                          isCustomer
+                            ? 'bg-gray-100 text-gray-900'
+                            : 'bg-yellow-100 text-gray-900'
+                        }`}>
+                          <p className="text-xs text-gray-500 mb-1">
+                            {isCustomer ? '👤 손님' : '🏪 사장님'}
+                          </p>
+                          <p className="text-sm">{text}</p>
+                        </div>
                       </div>
-                    </div>
+                    );
+                  }
+                  return (
+                    <p key={idx} className="text-sm text-gray-700 mb-1">
+                      {line}
+                    </p>
                   );
-                }
-                return (
-                  <p key={idx} className="text-sm text-gray-700 mb-1">
-                    {line}
-                  </p>
-                );
-              })}
-            </div>
+                })}
+              </div>
+            ) : (
+              <div className="bg-gray-50 rounded-lg p-8 text-center">
+                <div className="text-4xl mb-2">🔒</div>
+                <p className="text-sm text-gray-600 font-semibold mb-1">
+                  통화 내용이 가려졌습니다
+                </p>
+                <p className="text-xs text-gray-500">
+                  개인 통화는 개인정보 보호를 위해 내용을 표시하지 않습니다
+                </p>
+              </div>
+            )}
           </section>
         )}
 

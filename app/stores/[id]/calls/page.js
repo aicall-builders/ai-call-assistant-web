@@ -14,6 +14,12 @@ const STATUS_INFO = {
   summarized: { label: '요약 완료 ✨', color: 'bg-green-100 text-green-800' },
   error: { label: '오류', color: 'bg-red-100 text-red-800' },
 };
+// 발신자 분류 (안드 CallCategory와 동일)
+const CALLER_CATEGORIES = [
+  { value: 'UNCLASSIFIED', label: '미분류', emoji: '📋' },
+  { value: 'BUSINESS', label: '업무', emoji: '💼' },
+  { value: 'PERSONAL', label: '개인', emoji: '👤' },
+];
 
 export default function StoreCallsPage() {
   const params = useParams();
@@ -28,6 +34,7 @@ export default function StoreCallsPage() {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
+   const [selectedCategory, setSelectedCategory] = useState('UNCLASSIFIED'); // 안드 기본값과 동일
 
   // 로그인 확인 + 초기 데이터 로드
   useEffect(() => {
@@ -53,7 +60,7 @@ export default function StoreCallsPage() {
       }
 
       // 이 가게의 통화 목록
-      const callsRes = await callApi.list({ storeId, limit: 50 });
+      const callsRes = await callApi.list({ storeId, limit: 200 });
       setCalls(callsRes.data.calls || []);
     } catch (err) {
       console.error('데이터 로딩 실패:', err);
@@ -62,6 +69,43 @@ export default function StoreCallsPage() {
       setLoading(false);
     }
   };
+
+    // 분류 변경 (UNCLASSIFIED → BUSINESS / PERSONAL)
+  const handleChangeCategory = async (callId, newCategory, e) => {
+    // 카드 전체가 Link라서 클릭 이벤트 막기
+    e.preventDefault();
+    e.stopPropagation();
+    try {
+      await callApi.updateCategory(callId, newCategory);
+      // 즉시 UI에 반영 (서버 재호출 없이)
+      setCalls((prev) =>
+        prev.map((c) =>
+          c.id === callId ? { ...c, caller_category: newCategory } : c
+        )
+      );
+    } catch (err) {
+      console.error('분류 변경 실패:', err);
+      alert('분류 변경에 실패했습니다');
+    }
+  };
+
+    // 통화 삭제
+  const handleDelete = async (callId, e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!confirm('이 통화를 삭제하시겠어요? 되돌릴 수 없습니다.')) {
+      return;
+    }
+    try {
+      await callApi.delete(callId);
+      // 즉시 UI에서 제거
+      setCalls((prev) => prev.filter((c) => c.id !== callId));
+    } catch (err) {
+      console.error('삭제 실패:', err);
+      alert('삭제에 실패했습니다');
+    }
+  };
+
 
   // 파일 선택 → 업로드 + STT 시작
   const handleFileSelect = async (e) => {
@@ -279,6 +323,35 @@ export default function StoreCallsPage() {
             </button>
           </div>
 
+          {/* 카테고리 탭 (안드와 동일: 미분류 / 업무 / 개인) */}
+          <div className="flex border-b border-gray-200 mb-4">
+            {CALLER_CATEGORIES.map((cat) => {
+              const count = calls.filter((c) => (c.caller_category || 'UNCLASSIFIED') === cat.value).length;
+              const isActive = selectedCategory === cat.value;
+              return (
+                <button
+                  key={cat.value}
+                  onClick={() => setSelectedCategory(cat.value)}
+                  className={`flex-1 py-3 px-4 text-sm font-semibold border-b-2 transition ${
+                    isActive
+                      ? 'border-yellow-400 text-gray-900'
+                      : 'border-transparent text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  <span className="mr-1">{cat.emoji}</span>
+                  {cat.label}
+                  {count > 0 && (
+                    <span className={`ml-2 text-xs px-2 py-0.5 rounded-full ${
+                      isActive ? 'bg-yellow-100 text-yellow-800' : 'bg-gray-100 text-gray-600'
+                    }`}>
+                      {count}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+
           {calls.length === 0 ? (
             <div className="text-center py-8 bg-gray-50 rounded-lg">
               <div className="text-3xl mb-2">📭</div>
@@ -289,8 +362,21 @@ export default function StoreCallsPage() {
             </div>
           ) : (
             <div className="space-y-2">
-              {calls.map((call) => {
-                const status = STATUS_INFO[call.status] || {
+              {(() => {
+                const filteredCalls = calls.filter(
+                  (c) => (c.caller_category || 'UNCLASSIFIED') === selectedCategory
+                );
+                if (filteredCalls.length === 0) {
+                  const cat = CALLER_CATEGORIES.find((c) => c.value === selectedCategory);
+                  return (
+                    <div className="text-center py-12 text-gray-400">
+                      <div className="text-4xl mb-2">{cat?.emoji}</div>
+                      <p className="text-sm">{cat?.label} 통화가 없어요</p>
+                    </div>
+                  );
+                }
+                return filteredCalls.map((call) => {
+                  const status = STATUS_INFO[call.status] || {
                   label: call.status,
                   color: 'bg-gray-100 text-gray-800',
                 };
@@ -313,29 +399,86 @@ export default function StoreCallsPage() {
                           )}
                         </div>
                         <p className="text-sm text-gray-900 font-semibold">
-                          {call.caller_number || '발신번호 없음'}
+                          {(() => {
+                            const cat = call.caller_category || 'UNCLASSIFIED';
+                            // 안드 정책: PERSONAL/UNCLASSIFIED는 마스킹
+                            if (cat === 'BUSINESS') {
+                              return call.caller_number || '발신번호 없음';
+                            }
+                            return call.caller_number ? '*** ' + call.caller_number.slice(-4) : '통화 녹음 ***';
+                          })()}
                         </p>
                         <p className="text-xs text-gray-500 mt-1">
                           {formatDate(call.created_at)} · {formatDuration(call.duration)}
                         </p>
                       </div>
+                      <button
+                        onClick={(e) => handleDelete(call.id, e)}
+                        className="ml-2 w-8 h-8 flex items-center justify-center text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-full transition"
+                        title="삭제"
+                      >
+                        ✕
+                      </button>
                     </div>
 
-                    {/* 요약 미리보기 */}
+                    
+
+                    {/* 요약 미리보기 (BUSINESS만 내용 표시, 나머지는 마스킹) */}
                     {call.summary && (
                       <div className="mt-3 p-3 bg-blue-50 rounded-lg">
                         <p className="text-xs font-semibold text-blue-900 mb-1">
                           📝 AI 요약
-                          {call.category && (
+                          {call.caller_category === 'BUSINESS' && call.category && (
                             <span className="ml-2 text-blue-700">[{call.category}]</span>
                           )}
                         </p>
-                        <p className="text-sm text-gray-800">{call.summary}</p>
+                        <p className="text-sm text-gray-800">
+                          {call.caller_category === 'BUSINESS'
+                            ? call.summary
+                            : '🔒 개인정보 보호를 위해 내용이 가려졌습니다'}
+                        </p>
                       </div>
                     )}
+
+                    {/* 분류 변경 버튼 (안드와 동일) */}
+                    <div className="mt-3 flex gap-2">
+                      {(call.caller_category || 'UNCLASSIFIED') === 'UNCLASSIFIED' && (
+                        <>
+                          <button
+                            onClick={(e) => handleChangeCategory(call.id, 'BUSINESS', e)}
+                            className="flex-1 py-2 px-3 bg-yellow-400 hover:bg-yellow-500 text-gray-900 text-sm font-semibold rounded-lg transition"
+                          >
+                            💼 업무
+                          </button>
+                          <button
+                            onClick={(e) => handleChangeCategory(call.id, 'PERSONAL', e)}
+                            className="flex-1 py-2 px-3 border border-gray-300 hover:bg-gray-50 text-gray-700 text-sm font-semibold rounded-lg transition"
+                          >
+                            👤 개인
+                          </button>
+                        </>
+                      )}
+                      {call.caller_category === 'BUSINESS' && (
+                        <button
+                          onClick={(e) => handleChangeCategory(call.id, 'PERSONAL', e)}
+                          className="flex-1 py-2 px-3 border border-gray-300 hover:bg-gray-50 text-gray-700 text-sm font-semibold rounded-lg transition"
+                        >
+                          👤 개인으로 변경
+                        </button>
+                      )}
+                      {call.caller_category === 'PERSONAL' && (
+                        <button
+                          onClick={(e) => handleChangeCategory(call.id, 'BUSINESS', e)}
+                          className="flex-1 py-2 px-3 border border-gray-300 hover:bg-gray-50 text-gray-700 text-sm font-semibold rounded-lg transition"
+                        >
+                          💼 업무로 변경
+                        </button>
+                      )}
+                    </div>
                   </Link>
                 );
-              })}
+                });
+              })()}
             </div>
           )}
         </section>
