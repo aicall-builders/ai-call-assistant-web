@@ -26,7 +26,21 @@ export default function StoreCallsPage() {
   const router = useRouter();
   const fileInputRef = useRef(null);
 
-  const storeId = params.id;
+  // ⭐ CloudFront Function의 placeholder 매핑 회피: URL에서 직접 storeId 추출
+  const [storeId, setStoreId] = useState(null);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const pathParts = window.location.pathname.split('/').filter(Boolean);
+      // /stores/abc-123/calls/ → ['stores', 'abc-123', 'calls']
+      if (pathParts[0] === 'stores' && pathParts[1] && pathParts[1] !== 'placeholder' && pathParts[1] !== 'new') {
+        setStoreId(pathParts[1]);
+      } else if (params.id && params.id !== 'placeholder') {
+        setStoreId(params.id);
+      }
+    }
+  }, [params.id]);
+
   const [storeName, setStoreName] = useState('');
   const [calls, setCalls] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -38,6 +52,8 @@ export default function StoreCallsPage() {
 
   // 로그인 확인 + 초기 데이터 로드
   useEffect(() => {
+    if (!storeId) return;  // ⭐ storeId 정해지기 전엔 로드 스킵
+    
     const unsubscribe = watchAuthState(async (user) => {
       if (!user) {
         router.push('/login');
@@ -47,7 +63,6 @@ export default function StoreCallsPage() {
     });
     return () => unsubscribe();
   }, [router, storeId]);
-
   // 가게 정보 + 통화 목록 불러오기
   const loadData = async () => {
     setLoading(true);

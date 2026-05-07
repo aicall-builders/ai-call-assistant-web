@@ -43,8 +43,19 @@ const guessStoreEmoji = (name = '') => {
 export default function CallDetailPage() {
   const params = useParams();
   const router = useRouter();
-  const callId = params.callId;
-
+  const [callId, setCallId] = useState(null);
+  
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const pathParts = window.location.pathname.split('/').filter(Boolean);
+      // 예: /calls/abc-123/ → ['calls', 'abc-123']
+      if (pathParts[0] === 'calls' && pathParts[1] && pathParts[1] !== 'placeholder') {
+        setCallId(pathParts[1]);
+      } else if (params.callId && params.callId !== 'placeholder') {
+        setCallId(params.callId);
+      }
+    }
+  }, [params.callId]);
   const [call, setCall] = useState(null);
   const [stores, setStores] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -55,6 +66,9 @@ export default function CallDetailPage() {
   // 🔒 인증 + 데이터 로드 (기존 로직 유지)
   // ──────────────────────────────────────────────
   useEffect(() => {
+    if (!callId) return; 
+
+
     const unsubscribe = watchAuthState(async (user) => {
       if (!user) {
         router.push('/login');
