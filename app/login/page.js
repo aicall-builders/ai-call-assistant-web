@@ -256,16 +256,17 @@ export default function LoginPage() {
               </p>
             </div>
 
-            {/* 안드로이드 다운로드 CTA — 자리만 (나중에 href 교체) */}
+            {/* 안드로이드 다운로드 CTA */}
             <a
-              href="#"
+              href="https://drive.google.com/file/d/1jJNRF2CCVcCKSpdIPUODjWL6F5exxJ-T/view?usp=sharing"
+              target="_blank"
+              rel="noopener noreferrer"
               className="mt-4 flex items-center gap-3.5 px-4.5 py-3.5 rounded-[14px]
-                         text-white opacity-85 transition-all
-                         hover:opacity-100 hover:translate-y-[-1px]
+                         text-white transition-all
+                         hover:translate-y-[-1px]
                          hover:shadow-[0_8px_20px_rgba(17,24,39,0.18)]
                          group"
               style={{ background: '#111827', padding: '14px 18px' }}
-              onClick={(e) => e.preventDefault()} // 아직 비활성
             >
               <span className="flex-none w-10 h-10 rounded-[10px] flex items-center justify-center"
                     style={{ background: 'rgba(255, 255, 255, 0.1)' }}>
@@ -283,14 +284,14 @@ export default function LoginPage() {
                   </span>
                   <span className="text-[10px] font-semibold px-[7px] py-0.5 rounded-full"
                         style={{
-                          background: 'rgba(255, 217, 59, 0.2)',
-                          color: '#FFD93B',
+                          background: 'rgba(34, 197, 94, 0.2)',
+                          color: '#22C55E',
                         }}>
-                    곧 출시
+                    시연 가능
                   </span>
                 </span>
                 <span className="block text-[12px] text-white/60">
-                  Google Play에서 받기
+                  APK 직접 다운로드 (22MB)
                 </span>
               </span>
               <svg className="text-white/60 transition-transform group-hover:translate-x-0.5 group-hover:text-white"
