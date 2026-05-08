@@ -447,13 +447,6 @@ function StatItem({ num, name }) {
 // 🆕 통화 카드 (라벨식 정돈된 레이아웃)
 // ══════════════════════════════════════════════════════
 function CallCard({ call, store, onDelete, formatDate, formatDuration }) {
-  const cat = call.caller_category || 'UNCLASSIFIED';
-
-  // PERSONAL은 마스킹 카드로
-  if (cat === 'PERSONAL') {
-    return <MaskedCard call={call} onDelete={onDelete} formatDate={formatDate} formatDuration={formatDuration} />;
-  }
-
   // extracted_info 파싱
   let info = call.extracted_info;
   if (typeof info === 'string') {
@@ -554,45 +547,6 @@ function CallCard({ call, store, onDelete, formatDate, formatDuration }) {
   );
 }
 
-// ─── PERSONAL 마스킹 카드 ───
-function MaskedCard({ call, onDelete, formatDate, formatDuration }) {
-  const masked = call.caller_number ? '*** ' + call.caller_number.slice(-4) : '통화 녹음 ***';
-  return (
-    <Link
-      href={`/calls/${call.id}`}
-      className="block bg-white border border-line rounded-[14px] p-5 cursor-pointer transition-all hover:border-brand-blue"
-    >
-      <div className="flex items-center gap-3">
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-1.5 mb-2">
-            <span className="text-[10px] font-bold px-2 py-[3px] rounded-md bg-gray-100 text-gray-600 border border-gray-200">
-              🔒 개인 통화
-            </span>
-            <span className="text-[11px] text-ink-tertiary tabular-nums">
-              {formatDuration(call.duration)}
-            </span>
-          </div>
-          <div className="text-[18px] font-bold text-ink-secondary mb-1 tabular-nums">
-            {masked}
-          </div>
-          <div className="text-[12px] text-ink-tertiary">
-            {formatDate(call.created_at)} · 개인정보 보호를 위해 내용이 가려졌습니다
-          </div>
-        </div>
-        <button
-          onClick={(e) => onDelete(call.id, e)}
-          className="flex-none w-7 h-7 rounded-[8px] text-ink-tertiary hover:bg-red-50 hover:text-red-600 flex items-center justify-center transition-all"
-          title="삭제"
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="3 6 5 6 21 6"/>
-            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
-          </svg>
-        </button>
-      </div>
-    </Link>
-  );
-}
 
 // ──────────────────────────────────────────────────────
 // 날짜 포맷 (YYYY-MM-DD → "오늘 5/8(목)" 같은 친근한 형태)

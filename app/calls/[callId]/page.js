@@ -6,9 +6,6 @@ import Link from 'next/link';
 import { callApi, storeApi } from '@/lib/api';
 import { watchAuthState } from '@/lib/firebase';
 
-// ──────────────────────────────────────────────
-// 상수
-// ──────────────────────────────────────────────
 const CATEGORY_EMOJI = {
   '예약': '📅', '주문': '📦', '취소': '❌', '환불': '💰',
   '불만': '😤', '문의': '❓', '칭찬': '🌟', '기타': '📌',
@@ -28,18 +25,6 @@ const STATUS_INFO = {
   error:       { label: '오류',        cls: 'bg-status-error-bg text-status-error-text' },
 };
 
-const guessStoreEmoji = (name = '') => {
-  if (/햄버거|버거/.test(name)) return '🍔';
-  if (/카페|coffee|커피/.test(name)) return '☕';
-  if (/치킨|닭/.test(name)) return '🍗';
-  if (/피자/.test(name)) return '🍕';
-  if (/김밥/.test(name)) return '🍙';
-  if (/술|호프|주점/.test(name)) return '🍺';
-  if (/빵|베이커리/.test(name)) return '🥐';
-  if (/돼지|고기|구이/.test(name)) return '🥩';
-  return '🏪';
-};
-
 export default function CallDetailPage() {
   const params = useParams();
   const router = useRouter();
@@ -48,7 +33,6 @@ export default function CallDetailPage() {
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const pathParts = window.location.pathname.split('/').filter(Boolean);
-      // 예: /calls/abc-123/ → ['calls', 'abc-123']
       if (pathParts[0] === 'calls' && pathParts[1] && pathParts[1] !== 'placeholder') {
         setCallId(pathParts[1]);
       } else if (params.callId && params.callId !== 'placeholder') {
@@ -56,18 +40,15 @@ export default function CallDetailPage() {
       }
     }
   }, [params.callId]);
+
   const [call, setCall] = useState(null);
   const [stores, setStores] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [copyMsg, setCopyMsg] = useState('');
 
-  // ──────────────────────────────────────────────
-  // 🔒 인증 + 데이터 로드 (기존 로직 유지)
-  // ──────────────────────────────────────────────
   useEffect(() => {
     if (!callId) return; 
-
 
     const unsubscribe = watchAuthState(async (user) => {
       if (!user) {
@@ -96,7 +77,6 @@ export default function CallDetailPage() {
     }
   };
 
-  // 삭제
   const handleDelete = async () => {
     if (!confirm('이 통화를 삭제하시겠어요? 되돌릴 수 없습니다.')) return;
     try {
@@ -108,9 +88,6 @@ export default function CallDetailPage() {
     }
   };
 
-  // ──────────────────────────────────────────────
-  // 헬퍼
-  // ──────────────────────────────────────────────
   const formatDateTime = (dateStr) => {
     if (!dateStr) return '-';
     const d = new Date(dateStr);
@@ -135,9 +112,6 @@ export default function CallDetailPage() {
     try { return JSON.parse(keywords); } catch { return []; }
   };
 
-  // ──────────────────────────────────────────────
-  // STT 파싱 (기존 로직)
-  // ──────────────────────────────────────────────
   const sttLines = useMemo(() => {
     if (!call?.stt_result) return [];
     return call.stt_result.split('\n').map((line, idx) => {
@@ -157,7 +131,6 @@ export default function CallDetailPage() {
     }).filter(x => x.text.trim());
   }, [call?.stt_result]);
 
-  // 통화 원문 복사
   const handleCopyTranscript = async () => {
     if (!call?.stt_result) return;
     try {
@@ -173,9 +146,6 @@ export default function CallDetailPage() {
     }
   };
 
-  // ──────────────────────────────────────────────
-  // 로딩 / 에러
-  // ──────────────────────────────────────────────
   if (loading) {
     return (
       <main className="min-h-screen flex items-center justify-center bg-surface-page">
@@ -200,26 +170,16 @@ export default function CallDetailPage() {
     );
   }
 
-  // ──────────────────────────────────────────────
-  // 가공 데이터
-  // ──────────────────────────────────────────────
-  const isBusiness = call.caller_category === 'BUSINESS';
+  // 가공 데이터 (마스킹 없음 — 모든 통화 동일하게 표시)
   const status = STATUS_INFO[call.status] || { label: call.status, cls: 'bg-surface-muted text-ink-secondary' };
   const sentimentInfo = call.sentiment ? SENTIMENT_INFO[call.sentiment] : null;
   const categoryEmoji = call.category ? (CATEGORY_EMOJI[call.category] || '📌') : null;
   const keywords = parseKeywords(call.keywords);
-  const store = stores.find(s => s.id === call.store_id);
-  const storeName = store?.name || '';
-  const storeEmoji = guessStoreEmoji(storeName);
 
-  // 발신번호 표시
-  const displayNumber = isBusiness
-    ? (call.caller_number || '발신번호 없음')
-    : (call.caller_number ? '*** ' + call.caller_number.slice(-4) : '통화 녹음 ***');
+  const displayNumber = call.caller_number || '발신번호 없음';
 
   return (
     <main className="min-h-screen bg-surface-page">
-      {/* ───────── 상단바 ───────── */}
       <div className="sticky top-0 z-10 backdrop-blur-md bg-surface-page/85 border-b border-line">
         <div className="max-w-[720px] mx-auto px-5 py-3 flex items-center gap-3">
           <button
@@ -252,7 +212,7 @@ export default function CallDetailPage() {
         <section className="bg-white rounded-[16px] p-5 border border-line mb-4 shadow-card animate-fade-up">
           <div className="flex items-center gap-3.5 mb-3.5">
             <div className="flex-none w-12 h-12 bg-brand-blue-light text-brand-blue rounded-full flex items-center justify-center text-[22px]">
-              {isBusiness ? '👤' : '🔒'}
+              👤
             </div>
             <div className="flex-1 min-w-0">
               <div className="text-[16px] font-bold text-ink-primary tracking-tight mb-0.5">
@@ -289,9 +249,8 @@ export default function CallDetailPage() {
             </div>
           </div>
 
-          {/* 배지들 */}
           <div className="flex flex-wrap gap-1.5 mt-3">
-            {isBusiness && call.category && (
+            {call.category && (
               <span className="text-[11px] font-semibold px-2.5 py-1 rounded-full inline-flex items-center gap-1 bg-brand-blue-light text-brand-blue-dark">
                 {categoryEmoji} {call.category}
               </span>
@@ -306,17 +265,11 @@ export default function CallDetailPage() {
                 ⚠️ 조치 필요
               </span>
             )}
-            {storeName && (
-              <span className="text-[11px] font-semibold px-2.5 py-1 rounded-[8px] inline-flex items-center gap-1 bg-surface-muted text-ink-secondary">
-                {storeEmoji} {storeName}
-              </span>
-            )}
           </div>
         </section>
 
         {/* ───────── 오디오 플레이어 (자리만) ───────── */}
         <section className="bg-white rounded-[16px] p-5 border border-line mb-4 relative animate-fade-up anim-delay-100">
-          {/* 비활성 오버레이 */}
           <div
             className="absolute inset-0 rounded-[16px] flex flex-col items-center justify-center gap-1 z-[5]"
             style={{ background: 'rgba(245, 246, 250, 0.6)', backdropFilter: 'blur(2px)' }}
@@ -338,7 +291,6 @@ export default function CallDetailPage() {
             </span>
           </div>
 
-          {/* 자리 잡기용 UI */}
           <div className="flex items-center gap-3.5">
             <div className="flex-none w-11 h-11 bg-brand-blue text-white rounded-full flex items-center justify-center">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
@@ -376,12 +328,9 @@ export default function CallDetailPage() {
             </div>
             <div className="px-5 pb-5">
               <div className="bg-brand-blue-light rounded-[12px] px-4 py-3.5 text-[14px] text-ink-primary leading-[1.65]">
-                {isBusiness
-                  ? call.summary
-                  : '🔒 개인정보 보호를 위해 내용이 가려졌습니다'}
+                {call.summary}
               </div>
-              {/* 키워드 칩 (BUSINESS만) */}
-              {isBusiness && keywords.length > 0 && (
+              {keywords.length > 0 && (
                 <div className="flex flex-wrap gap-1.5 mt-3">
                   {keywords.slice(0, 6).map((kw, idx) => (
                     <span
@@ -404,73 +353,58 @@ export default function CallDetailPage() {
               <h2 className="text-[14px] font-bold text-ink-primary tracking-tight inline-flex items-center gap-1.5">
                 💬 통화 원문
               </h2>
-              {isBusiness && (
-                <button
-                  onClick={handleCopyTranscript}
-                  className="text-[12px] text-ink-tertiary hover:text-ink-secondary inline-flex items-center gap-1 px-2 py-1 rounded-[8px] hover:bg-surface-muted transition-all"
-                >
-                  {copyMsg ? (
-                    <span className="text-brand-blue">{copyMsg}</span>
-                  ) : (
-                    <>
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
-                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
-                      </svg>
-                      복사
-                    </>
-                  )}
-                </button>
-              )}
+              <button
+                onClick={handleCopyTranscript}
+                className="text-[12px] text-ink-tertiary hover:text-ink-secondary inline-flex items-center gap-1 px-2 py-1 rounded-[8px] hover:bg-surface-muted transition-all"
+              >
+                {copyMsg ? (
+                  <span className="text-brand-blue">{copyMsg}</span>
+                ) : (
+                  <>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+                      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                    </svg>
+                    복사
+                  </>
+                )}
+              </button>
             </div>
             <div className="px-5 pb-5">
-              {isBusiness ? (
-                <div className="bg-surface-page rounded-[12px] p-4 max-h-[480px] overflow-y-auto">
-                  {sttLines.map((line) => {
-                    if (!line.isMatch) {
-                      return (
-                        <p key={line.idx} className="text-[13px] text-ink-secondary mb-1">
-                          {line.text}
-                        </p>
-                      );
-                    }
+              <div className="bg-surface-page rounded-[12px] p-4 max-h-[480px] overflow-y-auto">
+                {sttLines.map((line) => {
+                  if (!line.isMatch) {
                     return (
-                      <div
-                        key={line.idx}
-                        className={`flex flex-col mb-3.5 ${line.isCustomer ? 'items-start' : 'items-end'}`}
-                      >
-                        <div className={`text-[11px] text-ink-tertiary mb-1 font-mono ${line.isCustomer ? '' : 'text-right'}`}>
-                          {line.isCustomer ? '👤 손님' : '🏪 사장님'}
-                        </div>
-                        <div
-                          className={`max-w-[85%] px-3.5 py-2.5 text-[13px] leading-[1.55] rounded-[12px] border ${
-                            line.isCustomer
-                              ? 'bg-white border-line text-ink-primary'
-                              : 'bg-brand-blue border-brand-blue text-white'
-                          }`}
-                        >
-                          {line.text}
-                        </div>
-                      </div>
+                      <p key={line.idx} className="text-[13px] text-ink-secondary mb-1">
+                        {line.text}
+                      </p>
                     );
-                  })}
-                </div>
-              ) : (
-                <div className="bg-surface-page rounded-[12px] py-8 px-4 text-center">
-                  <div className="text-[32px] mb-2">🔒</div>
-                  <div className="text-[13px] font-semibold text-ink-secondary mb-1">
-                    통화 내용이 가려졌습니다
-                  </div>
-                  <div className="text-[12px] text-ink-tertiary leading-[1.5]">
-                    개인 통화는 개인정보 보호를 위해<br />내용을 표시하지 않습니다
-                  </div>
-                </div>
-              )}
+                  }
+                  return (
+                    <div
+                      key={line.idx}
+                      className={`flex flex-col mb-3.5 ${line.isCustomer ? 'items-start' : 'items-end'}`}
+                    >
+                      <div className={`text-[11px] text-ink-tertiary mb-1 font-mono ${line.isCustomer ? '' : 'text-right'}`}>
+                        {line.isCustomer ? '👤 손님' : '🏪 사장님'}
+                      </div>
+                      <div
+                        className={`max-w-[85%] px-3.5 py-2.5 text-[13px] leading-[1.55] rounded-[12px] border ${
+                          line.isCustomer
+                            ? 'bg-white border-line text-ink-primary'
+                            : 'bg-brand-blue border-brand-blue text-white'
+                        }`}
+                      >
+                        {line.text}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           </section>
         )}
 
-        {/* ───────── 메타 정보 (디버그) ───────── */}
         <details className="bg-white rounded-[12px] border border-line mt-6">
           <summary className="cursor-pointer px-4 py-3 text-[12px] text-ink-tertiary font-mono select-none list-none">
             🔍 메타 정보
