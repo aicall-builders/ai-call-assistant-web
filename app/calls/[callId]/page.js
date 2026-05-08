@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { callApi, storeApi } from '@/lib/api';
@@ -29,7 +29,7 @@ export default function CallDetailPage() {
   const params = useParams();
   const router = useRouter();
   const [callId, setCallId] = useState(null);
-  
+
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const pathParts = window.location.pathname.split('/').filter(Boolean);
@@ -47,8 +47,17 @@ export default function CallDetailPage() {
   const [error, setError] = useState('');
   const [copyMsg, setCopyMsg] = useState('');
 
+  // ─── 오디오 플레이어 상태 ───
+  const audioRef = useRef(null);
+  const [audioUrl, setAudioUrl] = useState(null);
+  const [audioLoading, setAudioLoading] = useState(false);
+  const [audioError, setAudioError] = useState('');
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [audioDuration, setAudioDuration] = useState(0);
+
   useEffect(() => {
-    if (!callId) return; 
+    if (!callId) return;
 
     const unsubscribe = watchAuthState(async (user) => {
       if (!user) {
@@ -77,6 +86,60 @@ export default function CallDetailPage() {
     }
   };
 
+  // ─── 오디오 URL 가져오기 (재생 버튼 누를 때 lazy load) ───
+  const loadAudioUrl = async () => {
+    if (audioUrl) return audioUrl;
+    setAudioLoading(true);
+    setAudioError('');
+    try {
+      const res = await callApi.getAudio(callId);
+      const url = res.data.audio_url || res.data.url;
+      if (!url) throw new Error('음성 URL을 받지 못했습니다');
+      setAudioUrl(url);
+      return url;
+    } catch (err) {
+      console.error('오디오 URL 로딩 실패:', err);
+      setAudioError(err.response?.data?.message || '음성 파일을 불러올 수 없습니다');
+      return null;
+    } finally {
+      setAudioLoading(false);
+    }
+  };
+
+  // ─── 재생/일시정지 토글 ───
+  const togglePlay = async () => {
+    if (!audioUrl) {
+      // 처음 누르는 경우 — URL 받아오면 useEffect가 자동 재생
+      await loadAudioUrl();
+      return;
+    }
+    if (isPlaying) {
+      audioRef.current?.pause();
+    } else {
+      audioRef.current?.play().catch(e => {
+        console.error('재생 실패:', e);
+        setAudioError('재생할 수 없습니다');
+      });
+    }
+  };
+
+  // ─── audioUrl 세팅된 직후 자동 재생 ───
+  useEffect(() => {
+    if (audioUrl && audioRef.current) {
+      audioRef.current.play().catch(e => {
+        console.error('자동 재생 실패:', e);
+      });
+    }
+  }, [audioUrl]);
+
+  // ─── 진행률 바 클릭으로 탐색(seek) ───
+  const handleSeek = (e) => {
+    if (!audioRef.current || !audioDuration) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+    audioRef.current.currentTime = ratio * audioDuration;
+  };
+
   const handleDelete = async () => {
     if (!confirm('이 통화를 삭제하시겠어요? 되돌릴 수 없습니다.')) return;
     try {
@@ -100,10 +163,17 @@ export default function CallDetailPage() {
   };
 
   const formatDuration = (sec) => {
-    if (!sec) return '-';
+    if (!sec && sec !== 0) return '-';
     const m = Math.floor(sec / 60);
-    const s = sec % 60;
+    const s = Math.floor(sec % 60);
     return `${m}분 ${s}초`;
+  };
+
+  const formatTime = (sec) => {
+    if (!sec && sec !== 0) return '0:00';
+    const m = Math.floor(sec / 60);
+    const s = Math.floor(sec % 60);
+    return `${m}:${s.toString().padStart(2, '0')}`;
   };
 
   const parseKeywords = (keywords) => {
@@ -170,13 +240,12 @@ export default function CallDetailPage() {
     );
   }
 
-  // 가공 데이터 (마스킹 없음 — 모든 통화 동일하게 표시)
   const status = STATUS_INFO[call.status] || { label: call.status, cls: 'bg-surface-muted text-ink-secondary' };
   const sentimentInfo = call.sentiment ? SENTIMENT_INFO[call.sentiment] : null;
   const categoryEmoji = call.category ? (CATEGORY_EMOJI[call.category] || '📌') : null;
   const keywords = parseKeywords(call.keywords);
-
   const displayNumber = call.caller_number || '발신번호 없음';
+  const progressPct = audioDuration > 0 ? (currentTime / audioDuration) * 100 : 0;
 
   return (
     <main className="min-h-screen bg-surface-page">
@@ -268,53 +337,73 @@ export default function CallDetailPage() {
           </div>
         </section>
 
-        {/* ───────── 오디오 플레이어 (자리만) ───────── */}
-        <section className="bg-white rounded-[16px] p-5 border border-line mb-4 relative animate-fade-up anim-delay-100">
-          <div
-            className="absolute inset-0 rounded-[16px] flex flex-col items-center justify-center gap-1 z-[5]"
-            style={{ background: 'rgba(245, 246, 250, 0.6)', backdropFilter: 'blur(2px)' }}
-          >
-            <span
-              className="inline-flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-1 rounded-full text-white"
-              style={{ background: '#111827' }}
-            >
-              🎧 음성 듣기
-              <span
-                className="text-[10px] px-1.5 py-0.5 rounded-full ml-0.5"
-                style={{ background: 'rgba(255, 217, 59, 0.25)', color: '#FFD93B' }}
-              >
-                곧 출시
-              </span>
-            </span>
-            <span className="text-[11px] text-ink-tertiary">
-              백엔드 준비 후 활성화됩니다
-            </span>
-          </div>
+        {/* ───────── 오디오 플레이어 (활성화) ───────── */}
+        <section className="bg-white rounded-[16px] p-5 border border-line mb-4 animate-fade-up anim-delay-100">
+          {audioUrl && (
+            <audio
+              ref={audioRef}
+              src={audioUrl}
+              preload="metadata"
+              onLoadedMetadata={(e) => setAudioDuration(e.currentTarget.duration || 0)}
+              onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime || 0)}
+              onPlay={() => setIsPlaying(true)}
+              onPause={() => setIsPlaying(false)}
+              onEnded={() => { setIsPlaying(false); setCurrentTime(0); }}
+              onError={() => setAudioError('음성 재생 중 오류가 발생했습니다')}
+            />
+          )}
 
           <div className="flex items-center gap-3.5">
-            <div className="flex-none w-11 h-11 bg-brand-blue text-white rounded-full flex items-center justify-center">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-                <polygon points="5 3 19 12 5 21 5 3"/>
-              </svg>
-            </div>
-            <div className="flex-1 h-9 flex items-center gap-[2px] overflow-hidden">
-              {Array.from({ length: 80 }).map((_, i) => {
-                const h = 4 + Math.random() * 30;
-                const op = 0.3 + Math.random() * 0.7;
-                return (
-                  <div
-                    key={i}
-                    className="w-[2px] bg-brand-blue rounded-[2px]"
-                    style={{ height: `${h}px`, opacity: op }}
-                  />
-                );
-              })}
+            <button
+              onClick={togglePlay}
+              disabled={audioLoading}
+              className="flex-none w-11 h-11 bg-brand-blue text-white rounded-full flex items-center justify-center hover:bg-brand-blue-dark transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              title={isPlaying ? '일시정지' : '재생'}
+            >
+              {audioLoading ? (
+                <svg className="animate-spin" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                  <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+                </svg>
+              ) : isPlaying ? (
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                  <rect x="6" y="4" width="4" height="16" rx="1"/>
+                  <rect x="14" y="4" width="4" height="16" rx="1"/>
+                </svg>
+              ) : (
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                  <polygon points="5 3 19 12 5 21 5 3"/>
+                </svg>
+              )}
+            </button>
+
+            <div
+              className="flex-1 h-9 flex items-center cursor-pointer"
+              onClick={handleSeek}
+              role="slider"
+              aria-label="재생 진행률"
+              aria-valuenow={Math.round(progressPct)}
+              aria-valuemin={0}
+              aria-valuemax={100}
+            >
+              <div className="w-full h-1.5 bg-surface-muted rounded-full overflow-hidden relative">
+                <div
+                  className="absolute top-0 left-0 h-full bg-brand-blue rounded-full transition-[width] duration-100"
+                  style={{ width: `${progressPct}%` }}
+                />
+              </div>
             </div>
           </div>
-          <div className="flex justify-between mt-1.5 text-[11px] text-ink-tertiary font-mono">
-            <span>0:00</span>
-            <span>{formatDuration(call.duration)}</span>
+
+          <div className="flex justify-between mt-2 text-[11px] text-ink-tertiary font-mono">
+            <span>{formatTime(currentTime)}</span>
+            <span>{audioDuration > 0 ? formatTime(audioDuration) : formatDuration(call.duration)}</span>
           </div>
+
+          {audioError && (
+            <div className="mt-3 text-[11px] text-red-600 bg-red-50 px-3 py-2 rounded-[8px]">
+              {audioError}
+            </div>
+          )}
         </section>
 
         {/* ───────── AI 요약 ───────── */}
