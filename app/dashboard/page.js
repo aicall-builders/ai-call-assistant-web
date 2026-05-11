@@ -463,14 +463,14 @@ function CallCard({ call, store, onDelete, formatDate, formatDuration }) {
 
   const phone = call.caller_number || '발신번호 없음';
 
-  // 라벨식 정보 행 만들기 (값 있는 것만)
-  const rows = [];
-  if (info?.customer_name) rows.push(['성명', info.customer_name]);
-  if (info?.date)          rows.push(['날짜', formatNiceDate(info.date)]);
-  if (info?.time)          rows.push(['시간', info.time]);
-  if (info?.party_size)    rows.push(['인원', `${info.party_size}명`]);
-  if (info?.menu && info.menu.length > 0) rows.push(['메뉴', info.menu.join(', ')]);
-  if (info?.special_notes) rows.push(['특이사항', info.special_notes]);
+// 라벨식 정보 행 만들기 (값 있는 것만)
+const rows = [];
+if (info?.customer_name) rows.push(['👤 성명', info.customer_name]);
+if (info?.date)          rows.push(['📅 날짜', formatNiceDate(info.date)]);
+if (info?.time)          rows.push(['🕐 시간', info.time]);
+if (info?.party_size)    rows.push(['👥 인원', `${info.party_size}명`]);
+if (info?.menu && info.menu.length > 0) rows.push(['🍽️ 메뉴', info.menu.join(', ')]);
+if (info?.special_notes) rows.push(['⚠️ 특이사항', info.special_notes]);
 
   return (
     <Link
@@ -522,7 +522,7 @@ function CallCard({ call, store, onDelete, formatDate, formatDuration }) {
         <div className="space-y-1.5 mb-4">
           {rows.map(([label, value]) => (
             <div key={label} className="flex items-start gap-3 text-[13px]">
-              <span className="flex-none w-14 text-ink-tertiary">{label}</span>
+              <span className="flex-none w-20 text-ink-tertiary">{label}</span>
               <span className="flex-1 text-ink-primary font-medium">{value}</span>
             </div>
           ))}
