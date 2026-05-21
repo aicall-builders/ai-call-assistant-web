@@ -76,7 +76,7 @@ export default function DashboardPage() {
         setTimeout(() => {
           setAuthLoading(false);
           router.push('/login');
-        }, 1500);
+        }, 5000);
       }
     });
     return () => unsubscribe();
