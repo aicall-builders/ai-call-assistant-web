@@ -32,45 +32,13 @@ export default function LoginPage() {
   }, []);
 
   // 카카오 로그인 버튼 클릭 처리
-  const handleKakaoLogin = async () => {
+  const handleKakaoLogin = () => {
     setError('');
     setIsLoading(true);
-
     try {
-      const kakaoAccessToken = await loginWithKakao();
-      console.log('✅ 카카오 access_token 받음');
-
-      // 카카오 사용자 정보 프론트에서 직접 조회
-      const kakaoUserResp = await fetch('https://kapi.kakao.com/v2/user/me', {
-          headers: { Authorization: `Bearer ${kakaoAccessToken}` },
-      });
-      const kakaoUser = await kakaoUserResp.json();
-      const kakaoId  = String(kakaoUser.id);
-      const email    = kakaoUser.kakao_account?.email || '';
-      const nickname = kakaoUser.kakao_account?.profile?.nickname || '';
-      
-      console.log('2️⃣ 백엔드에 인증 요청...');
-      const response = await authApi.kakaoLogin(kakaoId, email, nickname);
-      const { custom_token, uid } = response.data;
-      console.log('✅ Firebase Custom Token 받음:', { uid, nickname });
-
-      console.log('3️⃣ Firebase 로그인 중...');
-      await loginWithFirebaseCustomToken(custom_token);
-      console.log('✅ Firebase 로그인 완료');
-
-      if (nickname) {
-        localStorage.setItem('user_nickname', nickname);
-      }
-
-      console.log('🎉 로그인 성공! 대시보드로 이동');
-      router.push('/dashboard');
+      loginWithKakao();
     } catch (err) {
-      console.error('로그인 실패:', err);
-      setError(
-        err.response?.data?.message ||
-          err.message ||
-          '로그인에 실패했습니다. 다시 시도해주세요.'
-      );
+      setError(err.message || '카카오 로그인을 시작할 수 없습니다.');
       setIsLoading(false);
     }
   };

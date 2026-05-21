@@ -15,8 +15,10 @@ export default function RootLayout({ children }) {
       <head>
         {/* 카카오 SDK v1 로드 (팝업 방식 지원) */}
         <Script
-          src="https://developers.kakao.com/sdk/js/kakao.js"
-          strategy="beforeInteractive"
+         src="https://t1.kakaocdn.net/kakao_js_sdk/2.7.2/kakao.min.js"
+         integrity="sha384-TiCUE00h649CAMonG018J2ujOgDKW/kVWlChEuu4jK2vxfAAD0eZxzCKakxg55G4"
+         crossOrigin="anonymous"
+         strategy="beforeInteractive"
         />
       </head>
       <body className={inter.className}>{children}</body>
