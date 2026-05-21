@@ -1,11 +1,11 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { authApi } from '@/lib/api';
 import { loginWithFirebaseCustomToken } from '@/lib/firebase';
 
-export default function KakaoCallbackPage() {
+function KakaoCallback() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -20,7 +20,6 @@ export default function KakaoCallbackPage() {
 
   async function handleCallback(code) {
     try {
-      // 1. 인가 코드로 카카오 access_token 교환
       const tokenRes = await fetch('https://kauth.kakao.com/oauth/token', {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -34,11 +33,8 @@ export default function KakaoCallbackPage() {
       const tokenData = await tokenRes.json();
       const kakaoAccessToken = tokenData.access_token;
 
-      if (!kakaoAccessToken) {
-        throw new Error('카카오 토큰 발급 실패');
-      }
+      if (!kakaoAccessToken) throw new Error('카카오 토큰 발급 실패');
 
-      // 2. 카카오 사용자 정보 조회
       const userRes = await fetch('https://kapi.kakao.com/v2/user/me', {
         headers: { Authorization: `Bearer ${kakaoAccessToken}` },
       });
@@ -47,11 +43,9 @@ export default function KakaoCallbackPage() {
       const email    = kakaoUser.kakao_account?.email || '';
       const nickname = kakaoUser.kakao_account?.profile?.nickname || '';
 
-      // 3. 백엔드 인증
       const response = await authApi.kakaoLogin(kakaoId, email, nickname);
       const { custom_token } = response.data;
 
-      // 4. Firebase 로그인
       await loginWithFirebaseCustomToken(custom_token);
 
       if (nickname) localStorage.setItem('user_nickname', nickname);
@@ -64,11 +58,24 @@ export default function KakaoCallbackPage() {
   }
 
   return (
+    <div className="text-center">
+      <div className="inline-block w-8 h-8 border-4 border-[#FEE500] border-t-transparent rounded-full animate-spin mb-4" />
+      <p className="text-ink-secondary text-sm">카카오 로그인 처리 중...</p>
+    </div>
+  );
+}
+
+export default function KakaoCallbackPage() {
+  return (
     <main className="min-h-screen flex items-center justify-center">
-      <div className="text-center">
-        <div className="inline-block w-8 h-8 border-4 border-[#FEE500] border-t-transparent rounded-full animate-spin mb-4" />
-        <p className="text-ink-secondary text-sm">카카오 로그인 처리 중...</p>
-      </div>
+      <Suspense fallback={
+        <div className="text-center">
+          <div className="inline-block w-8 h-8 border-4 border-[#FEE500] border-t-transparent rounded-full animate-spin mb-4" />
+          <p className="text-ink-secondary text-sm">로딩 중...</p>
+        </div>
+      }>
+        <KakaoCallback />
+      </Suspense>
     </main>
   );
 }
