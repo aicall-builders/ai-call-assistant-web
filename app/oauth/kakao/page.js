@@ -4,6 +4,7 @@ import { useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { authApi } from '@/lib/api';
 import { loginWithFirebaseCustomToken, auth } from '@/lib/firebase';
+import { completeCalendarOAuth } from '@/lib/calendarOAuth';
 
 function KakaoCallback() {
   const router = useRouter();
@@ -11,12 +12,27 @@ function KakaoCallback() {
 
   useEffect(() => {
     const code = searchParams.get('code');
+    const state = searchParams.get('state') || '';
     if (!code) {
       router.push('/login');
       return;
     }
+    if (state.startsWith('calendar:kakao:')) {
+      handleCalendarCallback(code, state);
+      return;
+    }
     handleCallback(code);
   }, []);
+
+  async function handleCalendarCallback(code, state) {
+    try {
+      await completeCalendarOAuth({ provider: 'kakao', code, state });
+      router.push('/dashboard?calendar=connected');
+    } catch (err) {
+      console.error('카카오 캘린더 콜백 처리 실패:', err);
+      router.push('/dashboard?calendar=failed');
+    }
+  }
 
   async function handleCallback(code) {
     try {
@@ -70,7 +86,7 @@ function KakaoCallback() {
   return (
     <div className="text-center">
       <div className="inline-block w-8 h-8 border-4 border-[#FEE500] border-t-transparent rounded-full animate-spin mb-4" />
-      <p className="text-ink-secondary text-sm">카카오 로그인 처리 중...</p>
+      <p className="text-ink-secondary text-sm">카카오 처리 중...</p>
     </div>
   );
 }

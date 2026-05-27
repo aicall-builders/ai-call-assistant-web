@@ -4,7 +4,7 @@ import { useEffect, useState, useRef, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { logout, watchAuthState } from '@/lib/firebase';
-import { storeApi, callApi } from '@/lib/api';
+import { storeApi, callApi, calendarApi } from '@/lib/api';
 import Logo from '../../app/components/Logo';
 
 // ──────────────────────────────────────────────────────
@@ -46,6 +46,12 @@ const COLOR_STYLES = {
   gray:   'bg-gray-50 text-gray-700 border-gray-200',
 };
 
+const CALENDAR_PROVIDERS = {
+  google: { label: 'Google', shortLabel: 'Google' },
+  kakao: { label: '카카오', shortLabel: 'Kakao' },
+  naver: { label: '네이버', shortLabel: 'Naver' },
+};
+
 export default function DashboardPage() {
   const router = useRouter();
   const fileInputRef = useRef(null);
@@ -59,6 +65,8 @@ export default function DashboardPage() {
   const [dataLoading, setDataLoading] = useState(false);
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
+  const [calendarConnections, setCalendarConnections] = useState([]);
+  const [calendarBusy, setCalendarBusy] = useState(false);
 
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -86,12 +94,14 @@ export default function DashboardPage() {
     setDataLoading(true);
     setError('');
     try {
-      const [storesRes, callsRes] = await Promise.all([
+      const [storesRes, callsRes, calendarRes] = await Promise.all([
         storeApi.list(),
         callApi.list({ limit: 200 }),
+        calendarApi.listConnections().catch(() => ({ data: { connections: [] } })),
       ]);
       setStores(storesRes.data.stores || []);
       setCalls(callsRes.data.calls || []);
+      setCalendarConnections(calendarRes.data.connections || []);
     } catch (err) {
       console.error('데이터 로딩 실패:', err);
       setError(err.response?.data?.message || '데이터를 불러오지 못했습니다');
@@ -115,6 +125,82 @@ export default function DashboardPage() {
     } catch (err) {
       console.error('삭제 실패:', err);
       alert('삭제에 실패했습니다');
+    }
+  };
+
+
+  const buildCalendarState = (provider) => {
+    const randomPart = typeof crypto !== 'undefined' && crypto.randomUUID
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    return `calendar:${provider}:${randomPart}`;
+  };
+
+  const handleCalendarConnect = async (provider) => {
+    setCalendarBusy(true);
+    setError('');
+    try {
+      const redirectUri = `${window.location.origin}/oauth/${provider}`;
+      const state = buildCalendarState(provider);
+      localStorage.setItem(`calendar_oauth_state_${provider}`, state);
+      const res = await calendarApi.getAuthorizeUrl(provider, redirectUri, state);
+      window.location.href = res.data.authorize_url;
+    } catch (err) {
+      console.error('캘린더 연결 URL 생성 실패:', err);
+      setError(err.response?.data?.error || '캘린더 연결을 시작하지 못했습니다');
+      setCalendarBusy(false);
+    }
+  };
+
+  const handleCalendarDisconnect = async (provider) => {
+    if (!confirm(`${CALENDAR_PROVIDERS[provider]?.label || provider} 연결을 해제할까요?`)) return;
+    setCalendarBusy(true);
+    setError('');
+    try {
+      await calendarApi.disconnect(provider);
+      await loadData();
+      setSuccessMsg('캘린더 연결을 해제했습니다');
+    } catch (err) {
+      console.error('캘린더 연결 해제 실패:', err);
+      setError(err.response?.data?.error || '캘린더 연결 해제에 실패했습니다');
+    } finally {
+      setCalendarBusy(false);
+    }
+  };
+
+  const handleCalendarDefault = async (provider) => {
+    setCalendarBusy(true);
+    setError('');
+    try {
+      await calendarApi.setDefault(provider);
+      await loadData();
+      setSuccessMsg(`${CALENDAR_PROVIDERS[provider]?.label || provider}을 기본 캘린더로 설정했습니다`);
+    } catch (err) {
+      console.error('기본 캘린더 설정 실패:', err);
+      setError(err.response?.data?.error || '기본 캘린더 설정에 실패했습니다');
+    } finally {
+      setCalendarBusy(false);
+    }
+  };
+
+  const handleCalendarCreate = async (callId, provider, e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setCalendarBusy(true);
+    setError('');
+    setSuccessMsg('');
+    try {
+      const payload = provider ? { provider } : {};
+      const res = await calendarApi.createEventForCall(callId, payload);
+      const label = CALENDAR_PROVIDERS[res.data.provider || provider]?.label || '캘린더';
+      setSuccessMsg(res.data.already_created ? `${label}에 이미 등록된 예약입니다` : `${label}에 예약을 등록했습니다`);
+    } catch (err) {
+      console.error('캘린더 등록 실패:', err);
+      const status = err.response?.status;
+      const message = err.response?.data?.error || '캘린더 등록에 실패했습니다';
+      setError(status === 409 ? '먼저 캘린더를 연동해야 합니다' : message);
+    } finally {
+      setCalendarBusy(false);
     }
   };
 
@@ -324,6 +410,71 @@ export default function DashboardPage() {
           </div>
         </section>
 
+
+        {/* ───────── 캘린더 연동 ───────── */}
+        <section className="bg-white border border-line rounded-[14px] p-4 sm:p-5 mb-4 animate-fade-up anim-delay-150">
+          <div className="flex items-start justify-between gap-3 mb-3">
+            <div>
+              <h2 className="text-[14px] font-bold text-ink-primary">캘린더 연동</h2>
+              <p className="text-[12px] text-ink-tertiary mt-0.5">예약 카드의 날짜와 시간을 연결된 캘린더에 바로 등록합니다.</p>
+            </div>
+            <button
+              onClick={loadData}
+              disabled={dataLoading || calendarBusy}
+              className="text-[12px] text-ink-tertiary hover:text-ink-secondary disabled:opacity-50"
+            >
+              새로고침
+            </button>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            {Object.entries(CALENDAR_PROVIDERS).map(([provider, meta]) => {
+              const connection = calendarConnections.find((item) => item.provider === provider);
+              return (
+                <div key={provider} className="border border-line rounded-[12px] p-3 flex flex-col gap-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[13px] font-semibold text-ink-primary">{meta.label}</span>
+                    {connection ? (
+                      <span className="text-[10px] font-bold px-2 py-[2px] rounded-full bg-emerald-50 text-emerald-700 border border-emerald-100">
+                        {connection.is_default ? '기본' : '연동됨'}
+                      </span>
+                    ) : (
+                      <span className="text-[10px] font-bold px-2 py-[2px] rounded-full bg-gray-50 text-gray-500 border border-gray-100">미연동</span>
+                    )}
+                  </div>
+                  {connection ? (
+                    <div className="flex gap-1.5">
+                      {!connection.is_default && (
+                        <button
+                          onClick={() => handleCalendarDefault(provider)}
+                          disabled={calendarBusy}
+                          className="flex-1 text-[11px] font-semibold px-2 py-2 rounded-[8px] bg-surface-page text-ink-secondary hover:bg-brand-blue-light hover:text-brand-blue disabled:opacity-50"
+                        >
+                          기본 설정
+                        </button>
+                      )}
+                      <button
+                        onClick={() => handleCalendarDisconnect(provider)}
+                        disabled={calendarBusy}
+                        className="flex-1 text-[11px] font-semibold px-2 py-2 rounded-[8px] bg-surface-page text-ink-secondary hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
+                      >
+                        해제
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => handleCalendarConnect(provider)}
+                      disabled={calendarBusy}
+                      className="text-[11px] font-semibold px-2 py-2 rounded-[8px] bg-brand-blue text-white hover:bg-blue-700 disabled:opacity-50"
+                    >
+                      OAuth 연결
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </section>
+
         {/* ───────── 업로드 영역 ───────── */}
         <div className="mb-4 animate-fade-up anim-delay-200">
           <input
@@ -396,6 +547,9 @@ export default function DashboardPage() {
                   call={call}
                   store={storeMap[call.store_id]}
                   onDelete={handleDelete}
+                  onCalendarCreate={handleCalendarCreate}
+                  calendarConnections={calendarConnections}
+                  calendarBusy={calendarBusy}
                   formatDate={formatDate}
                   formatDuration={formatDuration}
                 />
@@ -450,7 +604,7 @@ function StatItem({ num, name }) {
 // ══════════════════════════════════════════════════════
 // 🆕 통화 카드 (라벨식 정돈된 레이아웃)
 // ══════════════════════════════════════════════════════
-function CallCard({ call, store, onDelete, formatDate, formatDuration }) {
+function CallCard({ call, store, onDelete, onCalendarCreate, calendarConnections, calendarBusy, formatDate, formatDuration }) {
   // extracted_info 파싱
   let info = call.extracted_info;
   if (typeof info === 'string') {
@@ -466,6 +620,8 @@ function CallCard({ call, store, onDelete, formatDate, formatDuration }) {
   const badgeStyle = COLOR_STYLES[catInfo.color];
 
   const phone = call.caller_number || '발신번호 없음';
+  const defaultConnection = calendarConnections.find((item) => item.is_default) || calendarConnections[0];
+  const canCreateCalendarEvent = categoryCode === 'reservation' && info?.date && info?.time;
 
 // 라벨식 정보 행 만들기 (값 있는 것만)
 const rows = [];
@@ -530,6 +686,30 @@ if (info?.special_notes) rows.push(['⚠️ 특이사항', info.special_notes]);
               <span className="flex-1 text-ink-primary font-medium">{value}</span>
             </div>
           ))}
+        </div>
+      )}
+
+
+
+      {canCreateCalendarEvent && (
+        <div className="mb-4 flex items-center gap-2">
+          <button
+            onClick={(e) => onCalendarCreate(call.id, defaultConnection?.provider, e)}
+            disabled={calendarBusy || !defaultConnection}
+            className="inline-flex items-center justify-center gap-1.5 text-[12px] font-bold px-3 py-2 rounded-[9px] bg-brand-blue text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            title={defaultConnection ? `${CALENDAR_PROVIDERS[defaultConnection.provider]?.label || defaultConnection.provider} 캘린더에 등록` : '먼저 캘린더를 연동하세요'}
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+              <line x1="16" y1="2" x2="16" y2="6"/>
+              <line x1="8" y1="2" x2="8" y2="6"/>
+              <line x1="3" y1="10" x2="21" y2="10"/>
+              <line x1="12" y1="14" x2="12" y2="18"/>
+              <line x1="10" y1="16" x2="14" y2="16"/>
+            </svg>
+            {defaultConnection ? `${CALENDAR_PROVIDERS[defaultConnection.provider]?.shortLabel || defaultConnection.provider} 등록` : '캘린더 연동 필요'}
+          </button>
+          <span className="text-[11px] text-ink-tertiary">{formatNiceDate(info.date)} {info.time}</span>
         </div>
       )}
 
