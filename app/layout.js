@@ -14,8 +14,8 @@ export default function RootLayout({ children }) {
     <html lang="ko">
       <head>
         {/* preconnect — LCP 개선 */}
-        <link rel="preconnect" href="https://apis.google.com" />
-        <link rel="preconnect" href="https://call-recorder-prod.firebaseapp.com" />
+        <link rel="preconnect" href="https://apis.google.com" crossOrigin="anonymous" />
+        <link rel="preconnect" href="https://call-recorder-prod.firebaseapp.com" crossOrigin="anonymous" />
         <link rel="preconnect" href="https://t1.kakaocdn.net" />
 
         {/* 카카오 SDK v1 로드 (팝업 방식 지원) */}
