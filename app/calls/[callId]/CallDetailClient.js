@@ -1,10 +1,11 @@
-import CallDetailClient from './CallDetailClient';
+'use client';
 
-export function generateStaticParams() {
-  return [{ callId: 'placeholder' }];
-}
+import { useEffect, useState, useMemo, useRef } from 'react';
+import { useParams, useRouter } from 'next/navigation';
+import Link from 'next/link';
+import { callApi, storeApi } from '@/lib/api';
+import { watchAuthState } from '@/lib/firebase';
 
-<<<<<<< Updated upstream
 const CATEGORY_EMOJI = {
   '예약': '📅', '주문': '📦', '취소': '❌', '환불': '💰',
   '불만': '😤', '문의': '❓', '칭찬': '🌟', '기타': '📌',
@@ -15,6 +16,7 @@ const SENTIMENT_INFO = {
   neutral:  { label: '중립', cls: 'bg-surface-muted text-ink-secondary', emoji: '😐' },
   negative: { label: '부정', cls: 'bg-red-100 text-red-800', emoji: '😞' },
 };
+
 
 const STATUS_INFO = {
   uploaded:    { label: '업로드 완료', cls: 'bg-status-uploaded-bg text-status-uploaded-text' },
@@ -66,6 +68,7 @@ export default function CallDetailPage() {
       await loadData();
     });
     return () => unsubscribe();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [router, callId]);
 
   const loadData = async () => {
@@ -513,8 +516,3 @@ export default function CallDetailPage() {
     </main>
   );
 }
-=======
-export default function Page() {
-  return <CallDetailClient />;
-}
->>>>>>> Stashed changes

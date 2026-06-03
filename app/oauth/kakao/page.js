@@ -1,3 +1,4 @@
+<<<<<<< Updated upstream
 ﻿'use client';
 
 import { useEffect, Suspense, useRef } from 'react';
@@ -138,8 +139,14 @@ function KakaoCallback() {
       setTimeout(resolve, 5000);
     });
   }
+=======
+import { Suspense } from 'react';
+import OAuthCallbackClient from '../OAuthCallbackClient';
+>>>>>>> Stashed changes
 
+export default function Page() {
   return (
+<<<<<<< Updated upstream
     <div className="text-center">
       <div className="inline-block w-8 h-8 border-4 border-[#FEE500] border-t-transparent rounded-full animate-spin mb-4" />
       <p className="text-ink-secondary text-sm">카카오 처리 중...</p>
@@ -163,3 +170,10 @@ export default function KakaoCallbackPage() {
     </main>
   );
 }
+=======
+    <Suspense fallback={<main className="min-h-screen flex items-center justify-center">로딩 중...</main>}>
+      <OAuthCallbackClient provider="kakao" />
+    </Suspense>
+  );
+}
+>>>>>>> Stashed changes

@@ -1,8 +1,5 @@
-import { Inter } from "next/font/google";
 import Script from "next/script";
 import "./globals.css";
-
-const inter = Inter({ subsets: ["latin"] });
 
 export const metadata = {
   title: "AI 통화 비서",
@@ -13,7 +10,11 @@ export default function RootLayout({ children }) {
   return (
     <html lang="ko">
       <head>
+<<<<<<< Updated upstream
         {/* 카카오 SDK v1 로드 (팝업 방식 지원) */}
+=======
+        {/* Kakao JavaScript SDK v2: Kakao.Auth.authorize 기반 OAuth */}
+>>>>>>> Stashed changes
         <Script
          src="https://t1.kakaocdn.net/kakao_js_sdk/2.7.2/kakao.min.js"
          integrity="sha384-TiCUE00h649CAMonG018J2ujOgDKW/kVWlChEuu4jK2vxfAAD0eZxzCKakxg55G4"
@@ -21,7 +22,7 @@ export default function RootLayout({ children }) {
          strategy="beforeInteractive"
         />
       </head>
-      <body className={inter.className}>{children}</body>
+      <body>{children}</body>
     </html>
   );
 }
