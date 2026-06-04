@@ -43,7 +43,7 @@ function KakaoCallback() {
       const email    = kakaoUser.kakao_account?.email || '';
       const nickname = kakaoUser.kakao_account?.profile?.nickname || '';
 
-      const response = await authApi.kakaoLogin(kakaoId, email, nickname);
+      const response = await authApi.kakaoLogin(kakaoAccessToken);
       const { custom_token } = response.data;
 
       await loginWithFirebaseCustomToken(custom_token);
