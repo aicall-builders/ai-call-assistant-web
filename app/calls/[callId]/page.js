@@ -199,7 +199,7 @@ const sttLines = useMemo(() => {
     return lines.map((line, idx) => {
       const match = line.match(/^\[화자([^\]]+)\]:\s*(.*)$/);
       if (match) {
-        return { idx, speaker: match[1], isCustomer: match[1] === '1', text: match[2], isMatch: true };
+        return { idx, speaker: match[1], isCustomer: match[1] !== '1', text: match[2], isMatch: true };
       }
       return { idx, text: line, isMatch: false };
     });
