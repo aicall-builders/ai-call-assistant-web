@@ -451,10 +451,14 @@ function StatItem({ num, name }) {
 // 🆕 통화 카드 (라벨식 정돈된 레이아웃)
 // ══════════════════════════════════════════════════════
 function CallCard({ call, store, onDelete, formatDate, formatDuration }) {
-  // extracted_info 파싱
   let info = call.extracted_info;
   if (typeof info === 'string') {
     try { info = JSON.parse(info); } catch { info = null; }
+  }
+
+  let internalKw = call.internal_keywords;
+  if (typeof internalKw === 'string') {
+    try { internalKw = JSON.parse(internalKw); } catch { internalKw = null; }
   }
 
   const categoryCode =
@@ -464,17 +468,32 @@ function CallCard({ call, store, onDelete, formatDate, formatDuration }) {
 
   const catInfo = CATEGORY_INFO[categoryCode] || CATEGORY_INFO.other;
   const badgeStyle = COLOR_STYLES[catInfo.color];
-
   const phone = call.caller_number || '발신번호 없음';
 
-// 라벨식 정보 행 만들기 (값 있는 것만)
-const rows = [];
-if (info?.customer_name) rows.push(['👤 성명', info.customer_name]);
-if (info?.date)          rows.push(['📅 날짜', formatNiceDate(info.date)]);
-if (info?.time)          rows.push(['🕐 시간', info.time]);
-if (info?.party_size)    rows.push(['👥 인원', `${info.party_size}명`]);
-if (info?.menu && info.menu.length > 0) rows.push(['🍽️ 메뉴', info.menu.join(', ')]);
-if (info?.special_notes) rows.push(['⚠️ 특이사항', info.special_notes]);
+  const rows = [];
+  const hasExtractedInfo = info && Object.keys(info).some(k => info[k]);
+
+  if (hasExtractedInfo) {
+    if (info?.customer_name) rows.push(['👤 성명',    info.customer_name]);
+    if (info?.date)          rows.push(['📅 날짜',    formatNiceDate(info.date)]);
+    if (info?.time)          rows.push(['🕐 시간',    info.time]);
+    if (info?.party_size)    rows.push(['👥 인원',    `${info.party_size}명`]);
+    if (info?.menu?.length)  rows.push(['🍽️ 메뉴',   info.menu.join(', ')]);
+    if (info?.special_notes) rows.push(['⚠️ 특이사항', info.special_notes]);
+  } else if (internalKw && Object.keys(internalKw).length > 0) {
+    const ICON_MAP = {
+      '시술':'✂️','일정':'📅','고객상태':'👤','두피상태':'💇',
+      '예약인원':'👥','요청사항':'⚠️','식이제한':'🚫',
+      '매물종류':'🏠','희망조건':'📋','방문일정':'📅','고객성향':'👤',
+      '진료과목':'🏥','증상':'🩺','진료유형':'📋',
+      '네일상태':'💅','차량정보':'🚗','정비항목':'🔧','입고일정':'📅',
+      '주요내용':'📝','고객요청':'💬',
+    };
+    Object.entries(internalKw).forEach(([key, value]) => {
+      if (value && key !== '액션') rows.push([`${ICON_MAP[key]||'📌'} ${key}`, value]);
+    });
+    if (internalKw['액션']) rows.push(['✅ 액션', internalKw['액션']]);
+  }
 
   return (
     <Link
