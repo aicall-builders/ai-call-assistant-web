@@ -161,7 +161,12 @@ export default function DashboardPage() {
         wav: 'audio/wav',
         ogg: 'audio/ogg',
       };
-      const mimeType = file.type || MIME_BY_EXT[fileFormat] || 'audio/mp4';
+      let mimeType = file.type || MIME_BY_EXT[fileFormat] || 'audio/mp4';
+      // 백엔드와 동일하게 정규화
+      if (fileFormat === 'm4a' || fileFormat === 'mp4' || 
+        mimeType === 'audio/m4a' || mimeType === 'audio/x-m4a') {
+        mimeType = 'audio/mp4';
+      }
 
       setUploadProgress(10);
       const uploadRes = await callApi.requestUpload({
