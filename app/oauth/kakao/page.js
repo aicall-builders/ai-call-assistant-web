@@ -2,7 +2,7 @@
 
 import { useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { authApi } from '@/lib/api';
+import { authApi, getApiBase, getAuthHeaders } from '@/lib/api';
 import { loginWithFirebaseCustomToken, auth } from '@/lib/firebase';
 
 function KakaoCallback() {
@@ -11,14 +11,43 @@ function KakaoCallback() {
 
   useEffect(() => {
     const code = searchParams.get('code');
+    const state = searchParams.get('state');
     if (!code) {
       router.push('/login');
       return;
     }
-    handleCallback(code);
+    // state 있으면 캘린더 OAuth, 없으면 로그인 OAuth
+    if (state) {
+      handleCalendarCallback(code, state);
+    } else {
+      handleLoginCallback(code);
+    }
   }, []);
 
-  async function handleCallback(code) {
+  // 캘린더 연결
+  async function handleCalendarCallback(code, state) {
+    try {
+      const headers = await getAuthHeaders();
+      const res = await fetch(`${getApiBase()}/calendar/connections/oauth-code`, {
+        method: 'POST',
+        headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          provider: 'kakao',
+          code,
+          redirect_uri: `${window.location.origin}/oauth/kakao`,
+          state,
+        }),
+      });
+      if (!res.ok) throw new Error(`서버 오류: ${res.status}`);
+      document.getElementById('msg').textContent = '✅ 카카오 캘린더 연결 완료! 앱으로 돌아가세요.';
+    } catch (err) {
+      console.error(err);
+      document.getElementById('msg').textContent = `❌ 연결 실패: ${err.message}`;
+    }
+  }
+
+  // 로그인
+  async function handleLoginCallback(code) {
     try {
       const tokenRes = await fetch('https://kauth.kakao.com/oauth/token', {
         method: 'POST',
@@ -32,30 +61,23 @@ function KakaoCallback() {
       });
       const tokenData = await tokenRes.json();
       const kakaoAccessToken = tokenData.access_token;
-
       if (!kakaoAccessToken) throw new Error('카카오 토큰 발급 실패');
 
       const userRes = await fetch('https://kapi.kakao.com/v2/user/me', {
         headers: { Authorization: `Bearer ${kakaoAccessToken}` },
       });
       const kakaoUser = await userRes.json();
-      const kakaoId  = String(kakaoUser.id);
-      const email    = kakaoUser.kakao_account?.email || '';
       const nickname = kakaoUser.kakao_account?.profile?.nickname || '';
 
       const response = await authApi.kakaoLogin(kakaoAccessToken);
       const { custom_token } = response.data;
-
       await loginWithFirebaseCustomToken(custom_token);
 
       if (nickname) localStorage.setItem('user_nickname', nickname);
 
       await new Promise((resolve) => {
         const unsubscribe = auth.onAuthStateChanged((user) => {
-          if (user) {
-            unsubscribe();
-            resolve();
-          }
+          if (user) { unsubscribe(); resolve(); }
         });
         setTimeout(resolve, 5000);
       });
@@ -68,9 +90,9 @@ function KakaoCallback() {
   }
 
   return (
-    <div className="text-center">
+    <div className="text-center p-8">
       <div className="inline-block w-8 h-8 border-4 border-[#FEE500] border-t-transparent rounded-full animate-spin mb-4" />
-      <p className="text-ink-secondary text-sm">카카오 로그인 처리 중...</p>
+      <div id="msg" className="text-ink-secondary text-sm">카카오 처리 중...</div>
     </div>
   );
 }
