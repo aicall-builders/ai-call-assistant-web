@@ -24,22 +24,37 @@ function KakaoCallback() {
     }
   }, []);
 
-  // 캘린더 연결
+// 캘린더 연결
 async function handleCalendarCallback(code, state) {
     try {
-      // 만료된 캐시 토큰 제거 후 새로 발급
-      if (typeof window !== 'undefined') {
-        localStorage.removeItem('firebase_id_token');
+      // state에서 firebase_token 추출
+      let firebaseToken = null;
+      let realState = state;
+      try {
+        const stateObj = JSON.parse(atob(state));
+        firebaseToken = stateObj.firebase_token;
+        realState = stateObj.state;
+      } catch (e) {
+        // state가 JSON이 아니면 그냥 사용
       }
-      const headers = await getAuthHeaders();
+
+      const headers = { 'Content-Type': 'application/json' };
+      if (firebaseToken) {
+        headers['Authorization'] = `Bearer ${firebaseToken}`;
+      } else {
+        // fallback
+        const authHeaders = await getAuthHeaders();
+        Object.assign(headers, authHeaders);
+      }
+
       const res = await fetch(`${getApiBase()}/calendar/connections/oauth-code`, {
         method: 'POST',
-        headers: { ...headers, 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({
           provider: 'kakao',
           code,
           redirect_uri: `${window.location.origin}/oauth/kakao`,
-          state,
+          state: realState,
         }),
       });
       if (!res.ok) throw new Error(`서버 오류: ${res.status}`);
@@ -49,7 +64,6 @@ async function handleCalendarCallback(code, state) {
       document.getElementById('msg').textContent = `❌ 연결 실패: ${err.message}`;
     }
   }
-
   // 로그인
   async function handleLoginCallback(code) {
     try {
