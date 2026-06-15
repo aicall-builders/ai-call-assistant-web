@@ -82,7 +82,7 @@ export default function CustomersPage() {
         <CustomerDetail
           customer={selected}
           onBack={() => setSelected(null)}
-          onNote={(callId, type) => setNoteModal({ callId, type })}
+          
         />
       ) : (
         <>
@@ -159,7 +159,132 @@ export default function CustomersPage() {
   );
 }
 
-function CustomerDetail({ customer: c, onBack, onNote }) {
+// 통화별 메모/사진 인라인 컴포넌트
+function CallNoteInline({ call }) {
+  const API = process.env.NEXT_PUBLIC_API_BASE_URL;
+  const getToken = () => localStorage.getItem('firebase_id_token');
+  const fileInputRef = useRef(null);
+
+  const [memo, setMemo] = useState('');
+  const [photos, setPhotos] = useState([]);
+  const [editingMemo, setEditingMemo] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+  const [msg, setMsg] = useState('');
+
+  // 처음 열릴 때 로드
+  useEffect(() => {
+    fetch(`${API}/calls/${call.id}/note`, {
+      headers: { 'Authorization': `Bearer ${getToken()}` }
+    }).then(r=>r.json()).then(data=>{
+      setMemo(data.memo || '');
+      setPhotos(data.photos || []);
+      setLoaded(true);
+    }).catch(()=>setLoaded(true));
+  }, [call.id]);
+
+  const saveMemo = async () => {
+    setSaving(true);
+    try {
+      await fetch(`${API}/calls/${call.id}/note`, {
+        method:'PATCH',
+        headers:{'Content-Type':'application/json','Authorization':`Bearer ${getToken()}`},
+        body:JSON.stringify({memo}),
+      });
+      setEditingMemo(false);
+      setMsg('저장됐어요 ✓');
+      setTimeout(()=>setMsg(''),2000);
+    } catch{}
+    finally{setSaving(false);}
+  };
+
+  const uploadPhoto = async (file) => {
+    if (!file) return;
+    setUploading(true);
+    try {
+      const r1 = await fetch(`${API}/calls/${call.id}/photos/upload-url`,{
+        method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${getToken()}`},
+        body:JSON.stringify({file_name:file.name}),
+      });
+      const {photo_id,upload_url,s3_key,upload_headers}=await r1.json();
+      await fetch(upload_url,{method:'PUT',headers:upload_headers,body:file});
+      const r2=await fetch(`${API}/calls/${call.id}/photos`,{
+        method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${getToken()}`},
+        body:JSON.stringify({photo_id,s3_key}),
+      });
+      const saved=await r2.json();
+      setPhotos(prev=>[...prev,saved.photo]);
+      setMsg('사진 저장됐어요 ✓');
+      setTimeout(()=>setMsg(''),2000);
+    } catch(e){setMsg('업로드 실패');}
+    finally{setUploading(false);}
+  };
+
+  const deletePhoto = async (photoId) => {
+    if (!confirm('삭제할까요?')) return;
+    await fetch(`${API}/calls/${call.id}/photos/${photoId}`,{
+      method:'DELETE',headers:{'Authorization':`Bearer ${getToken()}`}
+    });
+    setPhotos(prev=>prev.filter(p=>p.id!==photoId));
+  };
+
+  return (
+    <div style={{ borderTop:'1px solid #F0F2F5', padding:'12px 16px', background:'#FAFBFC' }}>
+      {msg && <div style={{ fontSize:11, color:'#1A7A3C', marginBottom:8 }}>{msg}</div>}
+
+      {/* 메모 영역 */}
+      <div style={{ marginBottom: photos.length > 0 || editingMemo ? 10 : 0 }}>
+        {editingMemo ? (
+          <div>
+            <textarea value={memo} onChange={e=>setMemo(e.target.value)} rows={3}
+              placeholder="메모를 입력하세요..."
+              style={{ width:'100%', padding:'8px 10px', fontSize:12, border:'1px solid #E8EBF0', borderRadius:8, resize:'none', outline:'none', boxSizing:'border-box', fontFamily:'inherit', lineHeight:1.5, background:White }}
+            />
+            <div style={{ display:'flex', gap:6, marginTop:6 }}>
+              <button onClick={saveMemo} disabled={saving} style={{ padding:'5px 14px', background:DarkNavy, border:'none', borderRadius:6, color:White, fontSize:11, fontWeight:600, cursor:'pointer' }}>
+                {saving?'저장 중...':'저장'}
+              </button>
+              <button onClick={()=>setEditingMemo(false)} style={{ padding:'5px 14px', background:'#E8EBF0', border:'none', borderRadius:6, color:'#6B7889', fontSize:11, cursor:'pointer' }}>취소</button>
+            </div>
+          </div>
+        ) : memo ? (
+          <div onClick={()=>setEditingMemo(true)} style={{ cursor:'pointer', background:White, borderRadius:8, padding:'8px 10px', border:'1px solid #E8EBF0' }}>
+            <div style={{ fontSize:10, color:'#9AA5B5', marginBottom:3 }}>📝 메모 (클릭하여 수정)</div>
+            <p style={{ margin:0, fontSize:12, color:'#1F2A3D', lineHeight:1.5, whiteSpace:'pre-wrap' }}>{memo}</p>
+          </div>
+        ) : null}
+      </div>
+
+      {/* 사진 그리드 */}
+      {photos.length > 0 && (
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:6, marginBottom:8 }}>
+          {photos.map(p=>(
+            <div key={p.id} style={{ position:'relative', aspectRatio:'1', borderRadius:8, overflow:'hidden', border:'1px solid #E8EBF0' }}>
+              <img src={p.url} alt="" style={{ width:'100%', height:'100%', objectFit:'cover' }}/>
+              <button onClick={()=>deletePhoto(p.id)} style={{ position:'absolute', top:2, right:2, width:18, height:18, background:'rgba(0,0,0,0.5)', border:'none', borderRadius:'50%', color:White, cursor:'pointer', fontSize:10, display:'flex', alignItems:'center', justifyContent:'center' }}>✕</button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* 메모/사진 추가 버튼 */}
+      <div style={{ display:'flex', gap:6 }}>
+        {!editingMemo && (
+          <button onClick={()=>setEditingMemo(true)} style={{ display:'flex', alignItems:'center', gap:4, padding:'5px 10px', background:'none', border:'1px solid #E8EBF0', borderRadius:6, color:'#6B7889', fontSize:11, cursor:'pointer' }}>
+            ✏️ {memo ? '메모 수정' : '메모 추가'}
+          </button>
+        )}
+        <input ref={fileInputRef} type="file" accept="image/*" onChange={e=>uploadPhoto(e.target.files?.[0])} style={{ display:'none' }}/>
+        <button onClick={()=>fileInputRef.current?.click()} disabled={uploading} style={{ display:'flex', alignItems:'center', gap:4, padding:'5px 10px', background:'none', border:'1px solid #E8EBF0', borderRadius:6, color:'#6B7889', fontSize:11, cursor:'pointer' }}>
+          📷 {uploading ? '업로드 중...' : '사진 추가'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function CustomerDetail({ customer: c, onBack }) {
   return (
     <div>
       <button onClick={onBack} style={{ display:'flex', alignItems:'center', gap:6, background:'none', border:'none', cursor:'pointer', color:'#6B7889', fontSize:13, fontWeight:600, marginBottom:16, padding:'6px 0' }}>
@@ -192,6 +317,7 @@ function CustomerDetail({ customer: c, onBack, onNote }) {
       <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
         {c.calls.map(call=>(
           <div key={call.id} style={{ background:White, borderRadius:14, boxShadow:'0 1px 4px rgba(0,0,0,0.06)', overflow:'hidden' }}>
+            {/* 통화 요약 */}
             <Link href={`/calls/${call.id}`} style={{ display:'block', padding:'14px 16px', textDecoration:'none' }}>
               <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:6 }}>
                 <span style={{ fontSize:12, fontWeight:600, padding:'2px 8px', borderRadius:4, background:'#E3EEFB', color:'#2563B5' }}>{call.category||'분류없음'}</span>
@@ -199,31 +325,8 @@ function CustomerDetail({ customer: c, onBack, onNote }) {
               </div>
               {call.summary&&<p style={{ margin:0, fontSize:12, color:'#6B7889', lineHeight:1.5 }}>{call.summary}</p>}
             </Link>
-            {/* 메모/사진 버튼 — 페이지 이동 없이 모달로 */}
-            <div style={{ display:'flex', borderTop:'1px solid #F0F2F5' }}>
-              <button onClick={()=>onNote(call.id,'memo')} style={{
-                flex:1, display:'flex', alignItems:'center', justifyContent:'center', gap:6,
-                padding:'10px 0', background:'none', border:'none', cursor:'pointer',
-                color:'#6B7889', fontSize:12, fontWeight:600, borderRight:'1px solid #F0F2F5',
-              }}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
-                </svg>
-                메모
-              </button>
-              <button onClick={()=>onNote(call.id,'photo')} style={{
-                flex:1, display:'flex', alignItems:'center', justifyContent:'center', gap:6,
-                padding:'10px 0', background:'none', border:'none', cursor:'pointer',
-                color:'#6B7889', fontSize:12, fontWeight:600,
-              }}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
-                  <circle cx="12" cy="13" r="4"/>
-                </svg>
-                사진
-              </button>
-            </div>
+            {/* 메모/사진 인라인 */}
+            <CallNoteInline call={call} />
           </div>
         ))}
       </div>
