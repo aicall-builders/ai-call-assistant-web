@@ -4,397 +4,401 @@ import { useEffect, useState, useRef, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { watchAuthState } from '@/lib/firebase';
-import { storeApi, callApi } from '@/lib/api';
-import NavLayout from '../components/NavLayout';
+import { storeApi, callApi, calendarConnectApi } from '@/lib/api';
+
+// ── 색상 (앱과 동일) ──
+const DarkNavy    = '#3D4D6B';
+const DarkNavy2   = '#4A5A78';
+const AccentBlue  = '#3B7DD8';
+const LightBg     = '#F0F2F5';
+const White       = '#FFFFFF';
 
 const CATEGORY_INFO = {
-  reservation:         { label: '예약',     color: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
-  order:               { label: '주문',     color: 'bg-blue-50 text-blue-700 border-blue-200' },
-  cancel_refund:       { label: '취소',     color: 'bg-orange-50 text-orange-700 border-orange-200' },
-  complaint:           { label: '불만',     color: 'bg-red-50 text-red-700 border-red-200' },
-  hours_location:      { label: '문의',     color: 'bg-sky-50 text-sky-700 border-sky-200' },
-  price:               { label: '가격',     color: 'bg-sky-50 text-sky-700 border-sky-200' },
-  ingredients_allergy: { label: '알레르기', color: 'bg-amber-50 text-amber-800 border-amber-200' },
-  catering_bulk:       { label: '단체',     color: 'bg-indigo-50 text-indigo-700 border-indigo-200' },
-  positive:            { label: '칭찬',     color: 'bg-purple-50 text-purple-700 border-purple-200' },
-  other:               { label: '기타',     color: 'bg-gray-50 text-gray-700 border-gray-200' },
+  reservation:   { label: '예약', bg: '#E3EEFB', fg: '#2563B5' },
+  order:         { label: '주문', bg: '#E3EEFB', fg: '#2563B5' },
+  cancel_refund: { label: '취소', bg: '#FBE3E3', fg: '#C23B3B' },
+  complaint:     { label: '불만', bg: '#FBE3E3', fg: '#C23B3B' },
+  hours_location:{ label: '문의', bg: '#EBE9FB', fg: '#5B4FC2' },
+  price:         { label: '문의', bg: '#EBE9FB', fg: '#5B4FC2' },
+  positive:      { label: '칭찬', bg: '#E3FBED', fg: '#1A7A3C' },
+  other:         { label: '기타', bg: '#E8EBF0', fg: '#6B7889' },
 };
 
-const KO_CATEGORY_MAP = {
-  '예약': 'reservation', '주문': 'order', '취소': 'cancel_refund',
-  '환불': 'cancel_refund', '불만': 'complaint', '문의': 'hours_location',
-  '칭찬': 'positive', '기타': 'other',
+const KO_MAP = {
+  '예약':'reservation','주문':'order','취소':'cancel_refund',
+  '불만':'complaint','문의':'hours_location','기타':'other','칭찬':'positive',
 };
 
-const FILTERS = [
-  { key: 'all',         label: '전체' },
-  { key: 'reservation', label: '예약' },
-  { key: 'inquiry',     label: '문의' },
-  { key: 'complaint',   label: '불만' },
-];
+const WEEKDAYS = ['일','월','화','수','목','금','토'];
+const MONTHS = ['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
 
-const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
-
-function formatNiceDate(dateStr) {
-  if (!dateStr) return '';
-  try {
-    const d = new Date(dateStr);
-    if (isNaN(d.getTime())) return dateStr;
-    const today = new Date(); today.setHours(0, 0, 0, 0);
-    const target = new Date(d); target.setHours(0, 0, 0, 0);
-    const diff = Math.round((target - today) / 86400000);
-    let prefix = diff === 0 ? '오늘 ' : diff === 1 ? '내일 ' : diff === -1 ? '어제 ' : '';
-    return `${prefix}${d.getMonth() + 1}/${d.getDate()}(${WEEKDAYS[d.getDay()]})`;
-  } catch { return dateStr; }
+function getCatInfo(call) {
+  let info = call.extracted_info;
+  if (typeof info === 'string') { try { info = JSON.parse(info); } catch { info = null; } }
+  const code = info?.category_code || KO_MAP[call.category] || 'other';
+  return CATEGORY_INFO[code] || CATEGORY_INFO.other;
 }
+
+function formatTime(s) {
+  if (!s) return '';
+  const d = new Date(s);
+  return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+}
+
+function formatDuration(sec) {
+  if (!sec) return '';
+  return `${Math.floor(sec/60)}:${String(sec%60).padStart(2,'0')}`;
+}
+
+function buildCustomers(calls) {
+  const map = {};
+  calls.filter(c => c.caller_number).forEach(c => {
+    const p = c.caller_number;
+    if (!map[p]) map[p] = [];
+    map[p].push(c);
+  });
+  return Object.entries(map).map(([phone, cs]) => {
+    const sorted = [...cs].sort((a,b)=>new Date(b.created_at)-new Date(a.created_at));
+    const latest = sorted[0];
+    let info = latest.extracted_info;
+    if (typeof info==='string'){try{info=JSON.parse(info);}catch{info=null;}}
+    const name = cs.map(c=>{let i=c.extracted_info;if(typeof i==='string'){try{i=JSON.parse(i);}catch{i=null;}}return i?.customer_name;}).find(n=>n&&n.trim());
+    return { phone, name: name||null, callCount: cs.length, lastCall: latest, summary: latest.summary };
+  }).sort((a,b)=>b.callCount-a.callCount).slice(0,5);
+}
+
+// ── 사이드 네비 ──
+const NAV = [
+  { href:'/dashboard', label:'홈',   icon:'🏠' },
+  { href:'/calls',     label:'통화',  icon:'📞' },
+  { href:'/customers', label:'고객',  icon:'👥' },
+  { href:'/calendar',  label:'일정',  icon:'📅' },
+  { href:'/settings',  label:'설정',  icon:'⚙️' },
+];
 
 export default function DashboardPage() {
   const router = useRouter();
   const fileInputRef = useRef(null);
-  const [nickname, setNickname] = useState('사장님');
-  const [stores, setStores] = useState([]);
+  const [nickname, setNickname] = useState('사용자');
   const [calls, setCalls] = useState([]);
-  const [dataLoading, setDataLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [successMsg, setSuccessMsg] = useState('');
+  const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
-  const [activeFilter, setActiveFilter] = useState('all');
-  const [search, setSearch] = useState('');
+  const [stores, setStores] = useState([]);
+  const [events, setEvents] = useState([]);
+  const [autoSummary, setAutoSummary] = useState(false);
+  const [importantFilter, setImportantFilter] = useState(true);
+  const [calMonth, setCalMonth] = useState(new Date().getMonth());
+  const [calYear, setCalYear] = useState(new Date().getFullYear());
+  const [selectedDay, setSelectedDay] = useState(new Date().getDate());
+  const now = new Date();
 
   useEffect(() => {
     const unsub = watchAuthState(async (user) => {
-      if (user) {
-        setNickname(localStorage.getItem('user_nickname') || '사장님');
-        await loadData();
-      } else {
-        setTimeout(() => router.push('/login'), 3000);
-      }
+      if (!user) { setTimeout(()=>router.push('/login'),3000); return; }
+      setNickname(localStorage.getItem('user_nickname')||'사용자');
+      await loadData();
     });
     return () => unsub();
   }, [router]);
 
   const loadData = async () => {
-    setDataLoading(true);
+    setLoading(true);
     try {
-      const [storesRes, callsRes] = await Promise.all([
+      const [stRes, callRes] = await Promise.all([
         storeApi.list(),
         callApi.list({ limit: 200 }),
       ]);
-      setStores(storesRes.data.stores || []);
-      setCalls(callsRes.data.calls || []);
-    } catch (err) {
-      setError(err.response?.data?.message || '데이터를 불러오지 못했습니다');
-    } finally {
-      setDataLoading(false);
-    }
-  };
-
-  const handleDelete = async (callId, e) => {
-    e.preventDefault(); e.stopPropagation();
-    if (!confirm('이 통화를 삭제하시겠어요?')) return;
-    try {
-      await callApi.delete(callId);
-      setCalls(prev => prev.filter(c => c.id !== callId));
-    } catch { alert('삭제에 실패했습니다'); }
+      setStores(stRes.data.stores||[]);
+      const allCalls = callRes.data.calls||[];
+      setCalls(allCalls);
+      // 이번달 일정
+      const from = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-01`;
+      const last = new Date(now.getFullYear(), now.getMonth()+1, 0).getDate();
+      const to   = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${last}`;
+      calendarConnectApi.getEvents(from, to).then(r=>setEvents(r.data?.events||[])).catch(()=>{});
+    } catch(e){ console.error(e); }
+    finally { setLoading(false); }
   };
 
   const handleFileSelect = async (e) => {
     const file = e.target.files?.[0];
-    if (!file) return;
-    if (stores.length === 0) { setError('먼저 가게를 등록해주세요'); e.target.value = ''; return; }
-    const ext = '.' + file.name.split('.').pop().toLowerCase();
-    const allowed = ['.mp3', '.m4a', '.wav', '.ogg', '.mp4'];
-    if (!allowed.includes(ext)) { setError(`지원하지 않는 형식입니다. m4a, mp3, wav만 가능해요.`); e.target.value = ''; return; }
-    if (file.size > 50 * 1024 * 1024) { setError('파일이 너무 큽니다. 50MB 이하만 가능해요.'); e.target.value = ''; return; }
-    setError(''); setSuccessMsg(''); setUploading(true); setUploadProgress(0);
+    if (!file || stores.length===0) { e.target.value=''; return; }
+    const ext = '.'+file.name.split('.').pop().toLowerCase();
+    if (!['.mp3','.m4a','.wav','.ogg','.mp4'].includes(ext)) { e.target.value=''; return; }
+    setUploading(true); setUploadProgress(0);
     try {
-      const fileFormat = ext.replace('.', '') || 'm4a';
-      const MIME = { m4a: 'audio/mp4', mp4: 'audio/mp4', mp3: 'audio/mpeg', wav: 'audio/wav', ogg: 'audio/ogg' };
-      let mimeType = file.type || MIME[fileFormat] || 'audio/mp4';
-      if (['m4a','mp4'].includes(fileFormat) || ['audio/m4a','audio/x-m4a'].includes(mimeType)) mimeType = 'audio/mp4';
-      setUploadProgress(10);
-      const { data: { call_id, upload_url } } = await callApi.requestUpload({ storeId: stores[0].id, fileName: file.name, fileFormat, mimeType });
-      setUploadProgress(30);
-      const res = await fetch(upload_url, { method: 'PUT', headers: { 'Content-Type': mimeType }, body: file });
-      if (!res.ok) throw new Error(`S3 업로드 실패 (${res.status})`);
-      setUploadProgress(70);
+      const fmt = ext.replace('.','');
+      const MIME = {m4a:'audio/mp4',mp4:'audio/mp4',mp3:'audio/mpeg',wav:'audio/wav',ogg:'audio/ogg'};
+      let mime = file.type || MIME[fmt] || 'audio/mp4';
+      if (['m4a','mp4'].includes(fmt)) mime='audio/mp4';
+      setUploadProgress(15);
+      const { data:{ call_id, upload_url } } = await callApi.requestUpload({ storeId:stores[0].id, fileName:file.name, fileFormat:fmt, mimeType:mime });
+      setUploadProgress(40);
+      await fetch(upload_url,{ method:'PUT', headers:{'Content-Type':mime}, body:file });
+      setUploadProgress(80);
       await callApi.startProcessing(call_id);
       setUploadProgress(100);
-      setSuccessMsg(`✅ "${file.name}" 업로드 완료! AI가 분석 중이에요 (1~3분)`);
       await loadData();
-    } catch (err) {
-      setError(err.response?.data?.message || err.message || '업로드 실패');
-    } finally {
-      setUploading(false); setUploadProgress(0); e.target.value = '';
-    }
+    } catch(e){ console.error(e); }
+    finally { setUploading(false); setUploadProgress(0); e.target.value=''; }
   };
 
-  const todayStats = useMemo(() => {
-    const today = new Date(); today.setHours(0, 0, 0, 0);
-    const tc = calls.filter(c => c.created_at && new Date(c.created_at) >= today);
-    return { total: tc.length, summarized: tc.filter(c => c.status === 'summarized').length, newCount: tc.filter(c => c.is_read === 0 && c.status === 'summarized').length };
-  }, [calls]);
+  // 통계
+  const pendingCount = useMemo(()=> calls.filter(c=>c.status==='uploaded').length, [calls]);
+  const recentCalls  = useMemo(()=> calls.filter(c=>c.status==='summarized').slice(0,5), [calls]);
+  const customers    = useMemo(()=> buildCustomers(calls), [calls]);
 
-  const filteredCalls = useMemo(() => {
-    let filtered = [...calls];
-    if (activeFilter !== 'all') {
-      filtered = filtered.filter(c => {
-        let info = c.extracted_info;
-        if (typeof info === 'string') { try { info = JSON.parse(info); } catch { info = null; } }
-        const code = info?.category_code || KO_CATEGORY_MAP[c.category] || 'other';
-        if (activeFilter === 'reservation') return code === 'reservation' || code === 'order';
-        if (activeFilter === 'inquiry') return ['hours_location','price','ingredients_allergy','catering_bulk'].includes(code);
-        if (activeFilter === 'complaint') return code === 'complaint';
-        return true;
-      });
-    }
-    if (search.trim()) {
-      const q = search.trim().toLowerCase();
-      filtered = filtered.filter(c =>
-        c.caller_number?.includes(q) ||
-        c.summary?.toLowerCase().includes(q) ||
-        c.category?.includes(q)
-      );
-    }
-    return filtered;
-  }, [calls, activeFilter, search]);
-
-  const formatDate = (s) => {
-    if (!s) return '-';
-    const d = new Date(s), now = new Date();
-    const diffMin = Math.floor((now - d) / 60000);
-    if (diffMin < 1) return '방금 전';
-    if (diffMin < 60) return `${diffMin}분 전`;
-    const diffHr = Math.floor(diffMin / 60);
-    if (diffHr < 24) return `${diffHr}시간 전`;
-    return d.toLocaleString('ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-  };
-
-  const formatDuration = (sec) => {
-    if (!sec) return '-';
-    const m = Math.floor(sec / 60), s = sec % 60;
-    return m > 0 ? `${m}분 ${s}초` : `${s}초`;
-  };
-
-  return (
-    <NavLayout>
-      {/* 환영 + 통계 */}
-      <div className="rounded-[20px] p-5 sm:p-6 text-white mb-5 relative overflow-hidden animate-fade-up"
-           style={{ background: 'linear-gradient(135deg, #3B82F6 0%, #1E40AF 100%)' }}>
-        <div className="absolute -top-8 -right-8 w-48 h-48 pointer-events-none"
-             style={{ background: 'radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 70%)' }} />
-        <div className="flex items-start justify-between mb-4 relative">
-          <div>
-            <p className="text-[12px] text-white/70 mb-0.5">
-              {new Date().toLocaleDateString('ko-KR', { month: 'long', day: 'numeric', weekday: 'short' })}
-            </p>
-            <h1 className="text-[20px] font-bold tracking-tight">
-              안녕하세요, {nickname}님 👋
-            </h1>
-          </div>
-          <Link href="/stores/new"
-            className="flex-none w-8 h-8 rounded-[9px] flex items-center justify-center bg-white/20 hover:bg-white/30 transition-all">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>
-            </svg>
-          </Link>
-        </div>
-        <div className="grid grid-cols-3 gap-3 relative">
-          {[['총 통화', todayStats.total], ['요약 완료', todayStats.summarized], ['새 통화', todayStats.newCount]].map(([name, num]) => (
-            <div key={name}>
-              <div className="text-[26px] font-extrabold tracking-tight leading-none mb-1 tabular-nums">
-                {num}<span className="text-[13px] font-semibold text-white/70 ml-0.5">건</span>
-              </div>
-              <div className="text-[11px] text-white/70">{name}</div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* 업로드 */}
-      <div className="mb-4 animate-fade-up anim-delay-100">
-        <input ref={fileInputRef} type="file" accept="audio/*,.m4a,.mp3,.wav" onChange={handleFileSelect} disabled={uploading} className="hidden" />
-        <button
-          onClick={() => fileInputRef.current?.click()}
-          disabled={uploading || stores.length === 0}
-          className="w-full bg-white border-2 border-dashed border-line rounded-[14px] p-4 flex items-center gap-3 text-left transition-all hover:border-brand-blue hover:bg-brand-blue-light disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          <div className="flex-none w-10 h-10 bg-brand-blue-light text-brand-blue rounded-[11px] flex items-center justify-center">
-            {uploading ? <span className="text-lg">⏳</span> : (
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
-              </svg>
-            )}
-          </div>
-          <div className="flex-1 min-w-0">
-            {uploading ? (
-              <>
-                <div className="text-[13px] font-semibold text-ink-primary mb-1.5">업로드 중... {uploadProgress}%</div>
-                <div className="w-full bg-surface-muted rounded-full h-1.5">
-                  <div className="bg-brand-blue h-1.5 rounded-full transition-all" style={{ width: `${uploadProgress}%` }} />
-                </div>
-              </>
-            ) : (
-              <>
-                <div className="text-[13px] font-semibold text-ink-primary mb-0.5">통화 녹음 파일 업로드</div>
-                <div className="text-[11px] text-ink-tertiary">m4a, mp3, wav · 최대 50MB</div>
-              </>
-            )}
-          </div>
-        </button>
-      </div>
-
-      {error && <div className="mb-4 px-3.5 py-3 bg-red-50 border border-red-200 rounded-[10px] text-[13px] text-red-800">{error}</div>}
-      {successMsg && <div className="mb-4 px-3.5 py-3 bg-green-50 border border-green-200 rounded-[10px] text-[13px] text-green-800">{successMsg}</div>}
-
-      {/* 필터 탭 + 검색 */}
-      <div className="mb-3 animate-fade-up anim-delay-200">
-        <div className="flex items-center gap-2 mb-3">
-          <div className="flex items-center gap-1.5 flex-1 bg-white border border-line rounded-[11px] px-3 py-2">
-            <svg className="text-ink-tertiary flex-none" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-            </svg>
-            <input
-              type="text"
-              placeholder="전화번호, 요약 내용 검색..."
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              className="flex-1 text-[13px] bg-transparent outline-none text-ink-primary placeholder:text-ink-tertiary"
-            />
-          </div>
-          <button onClick={loadData} disabled={dataLoading}
-            className="flex-none w-9 h-9 flex items-center justify-center border border-line rounded-[10px] text-ink-secondary hover:bg-white transition-all disabled:opacity-50">
-            <svg className={dataLoading ? 'animate-spin' : ''} width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
-            </svg>
-          </button>
-        </div>
-        <div className="flex gap-2">
-          {FILTERS.map(f => (
-            <button key={f.key} onClick={() => setActiveFilter(f.key)}
-              className={`px-3 py-1.5 rounded-full text-[12px] font-semibold transition-all ${
-                activeFilter === f.key
-                  ? 'bg-brand-blue text-white'
-                  : 'bg-white border border-line text-ink-secondary hover:border-brand-blue/40'
-              }`}>
-              {f.label}
-              {f.key !== 'all' && (
-                <span className="ml-1.5 opacity-70">
-                  {calls.filter(c => {
-                    let info = c.extracted_info;
-                    if (typeof info === 'string') { try { info = JSON.parse(info); } catch { info = null; } }
-                    const code = info?.category_code || KO_CATEGORY_MAP[c.category] || 'other';
-                    if (f.key === 'reservation') return code === 'reservation' || code === 'order';
-                    if (f.key === 'inquiry') return ['hours_location','price','ingredients_allergy','catering_bulk'].includes(code);
-                    if (f.key === 'complaint') return code === 'complaint';
-                    return false;
-                  }).length}
-                </span>
-              )}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* 통화 목록 */}
-      <div className="animate-fade-up anim-delay-300">
-        {dataLoading && calls.length === 0 ? (
-          <div className="text-center py-16 text-ink-tertiary text-[13px]">불러오는 중...</div>
-        ) : filteredCalls.length === 0 ? (
-          <div className="text-center py-16 px-5 bg-white rounded-[14px] border border-dashed border-line">
-            <div className="w-14 h-14 mx-auto mb-3 bg-surface-page rounded-[16px] flex items-center justify-center text-2xl">📭</div>
-            <h3 className="text-[15px] font-bold text-ink-primary mb-1">
-              {search ? '검색 결과가 없어요' : '아직 통화가 없어요'}
-            </h3>
-            <p className="text-[12px] text-ink-secondary leading-snug">
-              {search ? '다른 검색어를 입력해보세요' : '위에서 녹음 파일을 업로드하거나\n앱을 설치해 자동 동기화를 시작해보세요'}
-            </p>
-          </div>
-        ) : (
-          <div className="flex flex-col gap-2.5">
-            {filteredCalls.map(call => (
-              <CallCard key={call.id} call={call} onDelete={handleDelete} formatDate={formatDate} formatDuration={formatDuration} />
-            ))}
-          </div>
-        )}
-      </div>
-    </NavLayout>
-  );
-}
-
-function CallCard({ call, onDelete, formatDate, formatDuration }) {
-  let info = call.extracted_info;
-  if (typeof info === 'string') { try { info = JSON.parse(info); } catch { info = null; } }
-  let internalKw = call.internal_keywords;
-  if (typeof internalKw === 'string') { try { internalKw = JSON.parse(internalKw); } catch { internalKw = null; } }
-
-  const categoryCode = info?.category_code || KO_CATEGORY_MAP[call.category] || 'other';
-  const catInfo = CATEGORY_INFO[categoryCode] || CATEGORY_INFO.other;
-  const phone = call.caller_number || '발신번호 없음';
-
-  const rows = [];
-  if (info && Object.keys(info).some(k => info[k])) {
-    if (info?.customer_name) rows.push(['👤 성명', info.customer_name]);
-    if (info?.date)          rows.push(['📅 날짜', formatNiceDate(info.date)]);
-    if (info?.time)          rows.push(['🕐 시간', info.time]);
-    if (info?.party_size)    rows.push(['👥 인원', `${info.party_size}명`]);
-    if (info?.special_notes) rows.push(['⚠️ 특이사항', info.special_notes]);
-  } else if (internalKw && Object.keys(internalKw).length > 0) {
-    const ICON = { '시술':'✂️','일정':'📅','고객상태':'👤','예약인원':'👥','요청사항':'⚠️' };
-    Object.entries(internalKw).forEach(([k, v]) => {
-      if (v && k !== '액션') rows.push([`${ICON[k] || '📌'} ${k}`, v]);
+  // 캘린더
+  const firstDay = new Date(calYear, calMonth, 1).getDay();
+  const lastDate = new Date(calYear, calMonth+1, 0).getDate();
+  const eventsByDay = useMemo(()=>{
+    const m={};
+    events.forEach(ev=>{
+      const d=ev.day_of_month||(ev.start_datetime?new Date(ev.start_datetime).getDate():null);
+      if(d){if(!m[d])m[d]=[];m[d].push(ev);}
     });
-    if (internalKw['액션']) rows.push(['✅ 액션', internalKw['액션']]);
-  }
+    return m;
+  },[events]);
+
+  const todayEvents = useMemo(()=>{
+    const today = now.getDate();
+    return (eventsByDay[today]||[]).slice(0,3);
+  },[eventsByDay]);
+
+  const prevMonth = ()=>{ if(calMonth===0){setCalYear(y=>y-1);setCalMonth(11);}else setCalMonth(m=>m-1); };
+  const nextMonth = ()=>{ if(calMonth===11){setCalYear(y=>y+1);setCalMonth(0);}else setCalMonth(m=>m+1); };
+
+  const todayStr = `${now.getFullYear()}년 ${now.getMonth()+1}월 ${now.getDate()}일 ${WEEKDAYS[now.getDay()]}요일`;
 
   return (
-    <Link href={`/calls/${call.id}`}
-      className="block bg-white border border-line rounded-[14px] p-4 sm:p-5 transition-all hover:border-brand-blue hover:shadow-[0_4px_12px_rgba(59,130,246,0.08)]">
-      <div className="flex items-start justify-between gap-2 mb-2.5">
-        <div className="flex items-center gap-1.5 flex-wrap">
-          <span className={`inline-flex items-center text-[11px] font-bold px-2 py-[2px] rounded-md border ${catInfo.color}`}>
-            {catInfo.label}
-          </span>
-          {call.is_read === 0 && call.status === 'summarized' && (
-            <span className="text-[10px] font-bold px-[6px] py-[2px] rounded-full bg-status-new-bg text-status-new-text">NEW</span>
-          )}
-          {call.action_required === 1 && (
-            <span className="text-[10px] font-bold px-[6px] py-[2px] rounded-full bg-red-100 text-red-700">처리필요</span>
-          )}
+    <div style={{ display:'flex', minHeight:'100vh', background:LightBg, fontFamily:"'Pretendard Variable',Pretendard,sans-serif" }}>
+
+      {/* ── 사이드바 ── */}
+      <aside style={{ width:72, background:DarkNavy, display:'flex', flexDirection:'column', alignItems:'center', paddingTop:20, paddingBottom:20, flexShrink:0, position:'sticky', top:0, height:'100vh' }}>
+        {/* 로고 */}
+        <div style={{ width:40, height:40, background:'rgba(255,255,255,0.15)', borderRadius:10, display:'flex', alignItems:'center', justifyContent:'center', marginBottom:28, fontSize:20 }}>📞</div>
+        {NAV.map(item => (
+          <Link key={item.href} href={item.href} style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:4, padding:'10px 0', width:'100%', textDecoration:'none', color: item.href==='/dashboard' ? White : 'rgba(255,255,255,0.55)', background: item.href==='/dashboard' ? 'rgba(255,255,255,0.12)' : 'transparent', marginBottom:4, transition:'all 0.2s' }}>
+            <span style={{ fontSize:20 }}>{item.icon}</span>
+            <span style={{ fontSize:10, fontWeight:500 }}>{item.label}</span>
+          </Link>
+        ))}
+      </aside>
+
+      {/* ── 메인 콘텐츠 ── */}
+      <div style={{ flex:1, display:'flex', flexDirection:'column', overflow:'auto' }}>
+
+        {/* 상단 헤더 */}
+        <header style={{ background:DarkNavy, padding:'16px 24px', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+          <div style={{ display:'flex', alignItems:'center', gap:12 }}>
+            <button onClick={()=>router.back()} style={{ background:'none', border:'none', color:'rgba(255,255,255,0.7)', cursor:'pointer', fontSize:18 }}>←</button>
+            <span style={{ color:White, fontWeight:700, fontSize:16 }}>AI 통화비서</span>
+          </div>
+          <div style={{ display:'flex', alignItems:'center', gap:12 }}>
+            <span style={{ color:'rgba(255,255,255,0.8)', fontSize:13 }}>{nickname}님</span>
+            <button style={{ background:'none', border:'none', color:'rgba(255,255,255,0.7)', cursor:'pointer', fontSize:20 }}>🔔</button>
+          </div>
+        </header>
+
+        {/* 날짜 + 통화 대기 */}
+        <div style={{ background:DarkNavy, padding:'0 24px 20px', textAlign:'center' }}>
+          <p style={{ color:'rgba(255,255,255,0.7)', fontSize:13, marginBottom:12 }}>{todayStr}</p>
+          <div style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:12, flexWrap:'wrap' }}>
+            <button
+              onClick={()=>fileInputRef.current?.click()}
+              disabled={uploading||stores.length===0}
+              style={{ display:'inline-flex', alignItems:'center', gap:8, background:'rgba(255,255,255,0.15)', border:'none', borderRadius:24, padding:'10px 20px', color:White, fontWeight:600, fontSize:14, cursor:'pointer' }}>
+              <span>🔄</span>
+              {uploading ? `업로드 중 ${uploadProgress}%` : `통화 분석 대기 ${pendingCount}건`}
+            </button>
+            <input ref={fileInputRef} type="file" accept="audio/*,.m4a,.mp3,.wav" onChange={handleFileSelect} disabled={uploading} style={{ display:'none' }} />
+            <button
+              onClick={()=>fileInputRef.current?.click()}
+              disabled={uploading||stores.length===0}
+              style={{ background:'rgba(255,255,255,0.15)', border:'none', borderRadius:24, padding:'10px 14px', color:White, cursor:'pointer', fontSize:16 }}>
+              📤
+            </button>
+          </div>
+          {/* 토글 */}
+          <div style={{ display:'flex', justifyContent:'center', gap:20, marginTop:12 }}>
+            <label style={{ display:'flex', alignItems:'center', gap:6, color:'rgba(255,255,255,0.75)', fontSize:12, cursor:'pointer' }}>
+              <input type="checkbox" checked={autoSummary} onChange={e=>setAutoSummary(e.target.checked)} style={{ accentColor:AccentBlue }} />
+              통화 자동 요약 {autoSummary?'ON':'OFF'}
+            </label>
+            <label style={{ display:'flex', alignItems:'center', gap:6, color:'rgba(255,255,255,0.75)', fontSize:12, cursor:'pointer' }}>
+              <input type="checkbox" checked={importantFilter} onChange={e=>setImportantFilter(e.target.checked)} style={{ accentColor:AccentBlue }} />
+              중요 통화 필터링 {importantFilter?'ON':'OFF'}
+            </label>
+          </div>
         </div>
-        <div className="flex items-center gap-1.5 flex-none text-[11px] text-ink-tertiary">
-          <span className="tabular-nums">{formatDate(call.created_at)}</span>
-          <span className="text-line">·</span>
-          <span className="tabular-nums">{formatDuration(call.duration)}</span>
-          <button onClick={e => onDelete(call.id, e)}
-            className="ml-0.5 w-6 h-6 rounded-[7px] hover:bg-red-50 hover:text-red-600 flex items-center justify-center transition-all">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
-            </svg>
-          </button>
+
+        {/* 콘텐츠 그리드 */}
+        <div style={{ flex:1, padding:20, display:'flex', flexDirection:'column', gap:16 }}>
+
+          {/* 상단 2단 그리드 */}
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:16 }}>
+
+            {/* 최근 분석 통화 */}
+            <div style={{ background:White, borderRadius:16, padding:16, boxShadow:'0 1px 4px rgba(0,0,0,0.06)' }}>
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:14 }}>
+                <span style={{ fontWeight:700, fontSize:14, color:'#1F2A3D' }}>최근 분석 통화</span>
+                <Link href="/calls" style={{ fontSize:12, color:AccentBlue, textDecoration:'none' }}>전체보기 →</Link>
+              </div>
+              {loading ? (
+                <div style={{ textAlign:'center', padding:'20px 0', color:'#9AA5B5', fontSize:13 }}>불러오는 중...</div>
+              ) : recentCalls.length===0 ? (
+                <div style={{ textAlign:'center', padding:'20px 0', color:'#9AA5B5', fontSize:13 }}>통화가 없어요</div>
+              ) : recentCalls.map(call => {
+                const cat = getCatInfo(call);
+                let info = call.extracted_info;
+                if (typeof info==='string'){try{info=JSON.parse(info);}catch{info=null;}}
+                const name = info?.customer_name;
+                const phone = call.caller_number || '발신번호 없음';
+                const direction = call.direction === 'outgoing' ? '발신' : '수신';
+                return (
+                  <Link key={call.id} href={`/calls/${call.id}`} style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 0', borderBottom:'1px solid #F0F2F5', textDecoration:'none', cursor:'pointer' }}>
+                    {/* 아바타 */}
+                    <div style={{ width:36, height:36, borderRadius:'50%', background:DarkNavy2, display:'flex', alignItems:'center', justifyContent:'center', color:White, fontWeight:700, fontSize:14, flexShrink:0 }}>
+                      {(name||phone).slice(0,1).toUpperCase()}
+                    </div>
+                    <div style={{ flex:1, minWidth:0 }}>
+                      <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:2 }}>
+                        <span style={{ fontWeight:600, fontSize:13, color:'#1F2A3D', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                          {name || phone}
+                        </span>
+                        <span style={{ fontSize:10, fontWeight:600, padding:'1px 6px', borderRadius:4, background:cat.bg, color:cat.fg, flexShrink:0 }}>{cat.label}</span>
+                        <span style={{ fontSize:10, color:'#9AA5B5', flexShrink:0 }}>{direction}</span>
+                      </div>
+                      {call.summary && <p style={{ fontSize:11, color:'#6B7889', margin:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{call.summary}</p>}
+                    </div>
+                    <span style={{ fontSize:11, color:'#9AA5B5', flexShrink:0 }}>{formatTime(call.created_at)}</span>
+                  </Link>
+                );
+              })}
+            </div>
+
+            {/* 최근 관리 고객 */}
+            <div style={{ background:White, borderRadius:16, padding:16, boxShadow:'0 1px 4px rgba(0,0,0,0.06)' }}>
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:14 }}>
+                <span style={{ fontWeight:700, fontSize:14, color:'#1F2A3D' }}>최근 관리 고객</span>
+                <Link href="/customers" style={{ fontSize:12, color:AccentBlue, textDecoration:'none' }}>전체보기 →</Link>
+              </div>
+              {loading ? (
+                <div style={{ textAlign:'center', padding:'20px 0', color:'#9AA5B5', fontSize:13 }}>불러오는 중...</div>
+              ) : customers.length===0 ? (
+                <div style={{ textAlign:'center', padding:'20px 0', color:'#9AA5B5', fontSize:13 }}>고객이 없어요</div>
+              ) : customers.map(c => (
+                <Link key={c.phone} href="/customers" style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 0', borderBottom:'1px solid #F0F2F5', textDecoration:'none' }}>
+                  <div style={{ width:36, height:36, borderRadius:'50%', background:AccentBlue, display:'flex', alignItems:'center', justifyContent:'center', color:White, fontWeight:700, fontSize:14, flexShrink:0 }}>
+                    {(c.name||c.phone).slice(0,1).toUpperCase()}
+                  </div>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ fontWeight:600, fontSize:13, color:'#1F2A3D', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                      {c.name || c.phone}
+                    </div>
+                    {c.summary && <p style={{ fontSize:11, color:'#6B7889', margin:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{c.summary}</p>}
+                  </div>
+                  <span style={{ fontSize:10, color:'#9AA5B5', flexShrink:0 }}>{c.callCount}회</span>
+                </Link>
+              ))}
+            </div>
+          </div>
+
+          {/* 하단 2단 그리드 */}
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:16 }}>
+
+            {/* 캘린더 */}
+            <div style={{ background:White, borderRadius:16, padding:16, boxShadow:'0 1px 4px rgba(0,0,0,0.06)' }}>
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:12 }}>
+                <span style={{ fontWeight:700, fontSize:14, color:'#1F2A3D' }}>캘린더</span>
+                <Link href="/calendar" style={{ fontSize:12, color:AccentBlue, textDecoration:'none' }}>전체보기 →</Link>
+              </div>
+              {/* 월 네비 */}
+              <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:10 }}>
+                <button onClick={prevMonth} style={{ background:'none', border:'none', cursor:'pointer', color:'#6B7889', fontSize:16 }}>‹</button>
+                <span style={{ fontWeight:600, fontSize:14, color:'#1F2A3D' }}>{calYear}년 {MONTHS[calMonth]}</span>
+                <button onClick={nextMonth} style={{ background:'none', border:'none', cursor:'pointer', color:'#6B7889', fontSize:16 }}>›</button>
+              </div>
+              {/* 요일 헤더 */}
+              <div style={{ display:'grid', gridTemplateColumns:'repeat(7,1fr)', textAlign:'center', marginBottom:4 }}>
+                {WEEKDAYS.map((d,i)=>(
+                  <div key={d} style={{ fontSize:10, fontWeight:600, color: i===0?'#E53E3E':i===6?AccentBlue:'#9AA5B5', padding:'2px 0' }}>{d}</div>
+                ))}
+              </div>
+              {/* 날짜 */}
+              <div style={{ display:'grid', gridTemplateColumns:'repeat(7,1fr)', gap:2 }}>
+                {Array.from({length:firstDay}).map((_,i)=><div key={`e${i}`}/>)}
+                {Array.from({length:lastDate}).map((_,i)=>{
+                  const day=i+1;
+                  const isToday=calYear===now.getFullYear()&&calMonth===now.getMonth()&&day===now.getDate();
+                  const isSel=day===selectedDay;
+                  const hasEv=eventsByDay[day]?.length>0;
+                  const col=(firstDay+i)%7;
+                  return (
+                    <button key={day} onClick={()=>setSelectedDay(day)} style={{
+                      width:'100%', aspectRatio:'1', border:'none', cursor:'pointer', borderRadius:'50%',
+                      background: isToday?DarkNavy:isSel?'#EFF6FF':'transparent',
+                      color: isToday?White:col===0?'#E53E3E':col===6?AccentBlue:'#1F2A3D',
+                      fontWeight: isToday||isSel?700:400, fontSize:11, position:'relative',
+                      display:'flex', alignItems:'center', justifyContent:'center', flexDirection:'column', gap:1,
+                    }}>
+                      {day}
+                      {hasEv&&<div style={{ width:4, height:4, borderRadius:'50%', background:isToday?'rgba(255,255,255,0.8)':AccentBlue }}/>}
+                    </button>
+                  );
+                })}
+              </div>
+              {/* 범례 */}
+              <div style={{ display:'flex', gap:12, marginTop:8 }}>
+                <div style={{ display:'flex', alignItems:'center', gap:4, fontSize:10, color:'#6B7889' }}>
+                  <div style={{ width:6, height:6, borderRadius:'50%', background:AccentBlue }}/> 통화 자동등록
+                </div>
+                <div style={{ display:'flex', alignItems:'center', gap:4, fontSize:10, color:'#6B7889' }}>
+                  <div style={{ width:6, height:6, borderRadius:'50%', background:'#3BA876' }}/> 수동 등록
+                </div>
+              </div>
+            </div>
+
+            {/* 다가오는 일정 */}
+            <div style={{ background:White, borderRadius:16, padding:16, boxShadow:'0 1px 4px rgba(0,0,0,0.06)' }}>
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:14 }}>
+                <span style={{ fontWeight:700, fontSize:14, color:'#1F2A3D' }}>다가오는 일정</span>
+                <Link href="/calendar" style={{ fontSize:12, color:AccentBlue, textDecoration:'none' }}>전체보기 →</Link>
+              </div>
+              {todayEvents.length===0 ? (
+                <div style={{ textAlign:'center', padding:'20px 0', color:'#9AA5B5', fontSize:13 }}>
+                  오늘 등록된 일정이 없어요
+                </div>
+              ) : todayEvents.map((ev,i)=>{
+                const colors=['#3B7DD8','#3BA876','#B56B8A'];
+                const color=colors[i%colors.length];
+                const time = ev.time || (ev.start_datetime?new Date(ev.start_datetime).toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'}):'');
+                return (
+                  <div key={ev.id||i} style={{ display:'flex', gap:12, padding:'10px 0', borderBottom:'1px solid #F0F2F5' }}>
+                    <div style={{ flexShrink:0, textAlign:'right' }}>
+                      <span style={{ fontSize:13, fontWeight:700, color }}>
+                        {time}
+                      </span>
+                    </div>
+                    <div style={{ flex:1, borderLeft:`3px solid ${color}`, paddingLeft:10 }}>
+                      <div style={{ fontWeight:600, fontSize:13, color:'#1F2A3D', marginBottom:2 }}>{ev.title}</div>
+                      {ev.description&&<div style={{ fontSize:11, color:'#6B7889' }}>{ev.description}</div>}
+                    </div>
+                  </div>
+                );
+              })}
+              {/* 빠른 업로드 */}
+              <button
+                onClick={()=>fileInputRef.current?.click()}
+                disabled={uploading||stores.length===0}
+                style={{ marginTop:16, width:'100%', padding:'10px 0', background:DarkNavy, border:'none', borderRadius:10, color:White, fontWeight:600, fontSize:13, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:6 }}>
+                📤 녹음 파일 업로드
+              </button>
+            </div>
+          </div>
         </div>
       </div>
-
-      <div className="text-[18px] sm:text-[20px] font-bold text-ink-primary tracking-tight mb-3 tabular-nums">{phone}</div>
-
-      {rows.length > 0 && (
-        <div className="space-y-1 mb-3">
-          {rows.map(([label, value]) => (
-            <div key={label} className="flex items-start gap-2.5 text-[12px]">
-              <span className="flex-none w-16 text-ink-tertiary">{label}</span>
-              <span className="flex-1 text-ink-primary font-medium">{value}</span>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {call.summary && (
-        <div className="bg-emerald-50 border border-emerald-100 rounded-[10px] px-3 py-2.5">
-          <div className="text-[10px] font-bold text-emerald-700 mb-1">✨ AI 요약</div>
-          <div className="text-[12px] text-emerald-900 leading-relaxed line-clamp-2">{call.summary}</div>
-        </div>
-      )}
-    </Link>
+    </div>
   );
 }
