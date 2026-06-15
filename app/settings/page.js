@@ -96,12 +96,22 @@ export default function SettingsPage() {
     try{await keywordApi.delete(activeStoreId,id);setKeywords(p=>p.filter(k=>k.id!==id));}catch{showMsg('❌ 삭제 실패');}
   };
 
-  const handlePreset=(preset)=>{
+  const handlePreset=async(preset)=>{
+    if(!activeStoreId){showMsg('❌ 가게 정보를 먼저 등록해주세요');return;}
     const existing=new Set(keywords.map(k=>k.keyword));
     const toAdd=preset.keywords.filter(kw=>!existing.has(kw));
+    if(toAdd.length===0){showMsg('✅ 이미 모두 추가된 키워드예요');return;}
     if(keywords.length+toAdd.length>20){showMsg('❌ 최대 20개를 초과해요');return;}
-    setKeywords(p=>[...p,...toAdd.map((kw,i)=>({id:`p-${Date.now()}-${i}`,keyword:kw}))]);
-    showMsg(`✅ ${preset.label} 키워드 추가됐어요`);
+    showMsg(`⏳ ${preset.label} 키워드 저장 중...`);
+    const added=[];
+    for(const kw of toAdd){
+      try{
+        const res=await keywordApi.create(activeStoreId,kw);
+        added.push(res.data?.keyword||{id:Date.now()+kw,keyword:kw});
+      }catch(e){console.error('키워드 저장 실패:',kw,e);}
+    }
+    setKeywords(p=>[...p,...added]);
+    showMsg(`✅ ${preset.label} 키워드 ${added.length}개 저장됐어요`);
   };
 
   const toggleCat=(cat)=>{
