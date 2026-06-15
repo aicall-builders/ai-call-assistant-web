@@ -8,10 +8,24 @@ import { callApi } from '@/lib/api';
 import AppLayout from '../../../components/AppLayout';
 
 export default function CallNotePage() {
-  const { callId } = useParams();
+  const params = useParams();
   const router = useRouter();
   const fileInputRef = useRef(null);
   const cameraInputRef = useRef(null);
+
+  // 정적 export에서 실제 callId 추출
+  const [callId, setCallId] = useState(null);
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const parts = window.location.pathname.split('/').filter(Boolean);
+      // /calls/[callId]/note
+      if (parts[0] === 'calls' && parts[1] && parts[1] !== 'placeholder' && parts[2] === 'note') {
+        setCallId(parts[1]);
+      } else if (params?.callId && params.callId !== 'placeholder') {
+        setCallId(params.callId);
+      }
+    }
+  }, [params]);
 
   const [memo, setMemo] = useState('');
   const [photos, setPhotos] = useState([]);
@@ -22,6 +36,7 @@ export default function CallNotePage() {
   const [error, setError] = useState('');
 
   useEffect(() => {
+    if (!callId) return;
     let redirectTimer = null;
     const unsub = watchAuthState(async (user) => {
       if (redirectTimer) clearTimeout(redirectTimer);
@@ -35,6 +50,7 @@ export default function CallNotePage() {
   }, [callId, router]);
 
   const loadNote = async () => {
+    if (!callId) return;
     setLoading(true);
     try {
       const res = await callApi.get(callId);
@@ -52,7 +68,13 @@ export default function CallNotePage() {
     setSaving(true);
     setError('');
     try {
-      await callApi.updateCategory(callId, undefined); // memo 업데이트용 — 실제론 PATCH /calls/:id { memo }
+      // PATCH /calls/:id { memo }
+      const token = localStorage.getItem('firebase_id_token');
+      await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/calls/${callId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ memo }),
+      });
       setMessage('💾 메모가 저장됐어요');
       setTimeout(() => setMessage(''), 2500);
     } catch (e) {
@@ -67,11 +89,6 @@ export default function CallNotePage() {
     if (file.size > 10 * 1024 * 1024) { setError('10MB 이하 사진만 가능해요'); return; }
     setUploading(true); setError('');
     try {
-      // 실제 API: POST /calls/:id/photos
-      const formData = new FormData();
-      formData.append('photo', file);
-      // await fetch(`${API_BASE}/calls/${callId}/photos`, { method: 'POST', body: formData });
-      // 임시 처리: 로컬 preview
       const url = URL.createObjectURL(file);
       setPhotos(prev => [...prev, { id: Date.now().toString(), url, name: file.name }]);
       setMessage('📷 사진이 추가됐어요');
@@ -88,95 +105,99 @@ export default function CallNotePage() {
     setPhotos(prev => prev.filter(p => p.id !== photoId));
   };
 
+  const DarkNavy = '#3D4D6B';
+  const AccentBlue = '#3B7DD8';
+  const White = '#FFFFFF';
+
   return (
-    <AppLayout>
-      <div className="mb-5 animate-fade-up">
-        <Link href={`/calls/${callId}`}
-          className="inline-flex items-center gap-1.5 text-[13px] text-ink-secondary hover:text-ink-primary mb-4 px-3 py-2 hover:bg-white rounded-[10px] transition-all">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M19 12H5M12 19l-7-7 7-7"/>
-          </svg>
-          통화 상세로
-        </Link>
-        <h1 className="text-[22px] font-bold text-ink-primary tracking-tight mb-0.5">통화 메모</h1>
-        <p className="text-[13px] text-ink-secondary">메모와 사진을 기록해두세요</p>
-      </div>
+    <AppLayout title="통화 메모" rightAction={
+      <Link href={callId ? `/calls/${callId}` : '/calls'} style={{ background:'rgba(255,255,255,0.15)', borderRadius:8, padding:'6px 10px', color:'white', fontSize:12, textDecoration:'none' }}>
+        통화 상세로
+      </Link>
+    }>
+      {message && <div style={{ marginBottom:14, padding:'12px 16px', background:'#E3FBED', borderRadius:10, fontSize:13, color:'#1A7A3C' }}>{message}</div>}
+      {error && <div style={{ marginBottom:14, padding:'12px 16px', background:'#FBE3E3', borderRadius:10, fontSize:13, color:'#C23B3B' }}>{error}</div>}
 
-      {message && <div className="mb-4 px-3.5 py-3 bg-green-50 border border-green-200 rounded-[10px] text-[13px] text-green-800">{message}</div>}
-      {error && <div className="mb-4 px-3.5 py-3 bg-red-50 border border-red-200 rounded-[10px] text-[13px] text-red-800">{error}</div>}
-
-      {loading ? (
-        <div className="text-center py-16 text-[13px] text-ink-tertiary">불러오는 중...</div>
+      {!callId || loading ? (
+        <div style={{ textAlign:'center', padding:'60px 0', color:'#9AA5B5', fontSize:14 }}>불러오는 중...</div>
       ) : (
-        <div className="flex flex-col gap-4 animate-fade-up anim-delay-100">
+        <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
           {/* 메모 */}
-          <div className="bg-white border border-line rounded-[16px] p-5">
-            <h2 className="text-[14px] font-bold text-ink-primary mb-3 flex items-center gap-2">
-              <span>✏️</span> 메모
-            </h2>
+          <div style={{ background:White, borderRadius:16, padding:20, boxShadow:'0 1px 4px rgba(0,0,0,0.06)' }}>
+            <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:14 }}>
+              <span style={{ fontSize:18 }}>✏️</span>
+              <span style={{ fontWeight:700, fontSize:15, color:'#1F2A3D' }}>메모</span>
+            </div>
             <textarea
               value={memo}
               onChange={e => setMemo(e.target.value)}
               placeholder="통화 관련 메모를 자유롭게 입력하세요..."
               rows={6}
-              className="w-full text-[14px] text-ink-primary placeholder:text-ink-tertiary bg-surface-page rounded-[12px] p-4 resize-none outline-none focus:ring-2 focus:ring-brand-blue/20 border border-transparent focus:border-brand-blue/30 transition-all leading-relaxed"
+              style={{ width:'100%', padding:'14px', background:'#F8F9FA', borderRadius:12, border:'1px solid #E8EBF0', fontSize:14, color:'#1F2A3D', resize:'none', outline:'none', lineHeight:1.6, boxSizing:'border-box', fontFamily:'inherit' }}
             />
-            <div className="flex items-center justify-between mt-3">
-              <span className="text-[11px] text-ink-tertiary">{memo.length}자</span>
-              <button onClick={handleSaveMemo} disabled={saving}
-                className="text-[13px] font-semibold text-white bg-brand-blue hover:bg-brand-blue-hover px-4 py-2 rounded-[10px] transition-all disabled:opacity-50">
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginTop:10 }}>
+              <span style={{ fontSize:11, color:'#C8CDD5' }}>{memo.length}자</span>
+              <button onClick={handleSaveMemo} disabled={saving} style={{
+                padding:'10px 20px', background:DarkNavy, border:'none', borderRadius:10,
+                color:White, fontWeight:600, fontSize:13, cursor:'pointer', opacity:saving?0.6:1,
+              }}>
                 {saving ? '저장 중...' : '저장하기'}
               </button>
             </div>
           </div>
 
           {/* 사진 */}
-          <div className="bg-white border border-line rounded-[16px] p-5">
-            <h2 className="text-[14px] font-bold text-ink-primary mb-3 flex items-center gap-2">
-              <span>📷</span> 첨부 사진
-            </h2>
+          <div style={{ background:White, borderRadius:16, padding:20, boxShadow:'0 1px 4px rgba(0,0,0,0.06)' }}>
+            <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:14 }}>
+              <span style={{ fontSize:18 }}>📷</span>
+              <span style={{ fontWeight:700, fontSize:15, color:'#1F2A3D' }}>첨부 사진</span>
+            </div>
 
-            {/* 사진 그리드 */}
             {photos.length > 0 && (
-              <div className="grid grid-cols-3 gap-2 mb-4">
+              <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:8, marginBottom:14 }}>
                 {photos.map(photo => (
-                  <div key={photo.id} className="relative aspect-square rounded-[10px] overflow-hidden border border-line">
-                    <img src={photo.photo_url || photo.url} alt="" className="w-full h-full object-cover" />
-                    <button onClick={() => handleDeletePhoto(photo.id)}
-                      className="absolute top-1 right-1 w-6 h-6 bg-black/50 hover:bg-black/70 rounded-full flex items-center justify-center transition-all">
-                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                        <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-                      </svg>
-                    </button>
+                  <div key={photo.id} style={{ position:'relative', aspectRatio:'1', borderRadius:10, overflow:'hidden', border:'1px solid #E8EBF0' }}>
+                    <img src={photo.photo_url || photo.url} alt="" style={{ width:'100%', height:'100%', objectFit:'cover' }} />
+                    <button onClick={() => handleDeletePhoto(photo.id)} style={{
+                      position:'absolute', top:4, right:4, width:22, height:22,
+                      background:'rgba(0,0,0,0.5)', border:'none', borderRadius:'50%',
+                      color:White, cursor:'pointer', fontSize:12, display:'flex', alignItems:'center', justifyContent:'center',
+                    }}>✕</button>
                   </div>
                 ))}
               </div>
             )}
 
-            {/* 업로드 버튼 */}
-            <input ref={fileInputRef} type="file" accept="image/*" onChange={e => handlePhotoUpload(e.target.files?.[0])} className="hidden" />
-            <input ref={cameraInputRef} type="file" accept="image/*" capture="camera" onChange={e => handlePhotoUpload(e.target.files?.[0])} className="hidden" />
+            <input ref={fileInputRef} type="file" accept="image/*" onChange={e => handlePhotoUpload(e.target.files?.[0])} style={{ display:'none' }} />
+            <input ref={cameraInputRef} type="file" accept="image/*" capture="camera" onChange={e => handlePhotoUpload(e.target.files?.[0])} style={{ display:'none' }} />
 
-            <div className="grid grid-cols-2 gap-2">
-              <button onClick={() => fileInputRef.current?.click()} disabled={uploading}
-                className="flex items-center justify-center gap-2 py-3 border border-dashed border-line rounded-[12px] text-[13px] font-medium text-ink-secondary hover:border-brand-blue hover:text-brand-blue hover:bg-brand-blue-light transition-all disabled:opacity-50">
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
+              <button onClick={() => fileInputRef.current?.click()} disabled={uploading} style={{
+                display:'flex', alignItems:'center', justifyContent:'center', gap:8,
+                padding:'12px', border:'2px dashed #E8EBF0', borderRadius:12,
+                background:'transparent', color:'#6B7889', fontSize:13, fontWeight:600, cursor:'pointer',
+              }}>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/>
                 </svg>
                 갤러리
               </button>
-              <button onClick={() => cameraInputRef.current?.click()} disabled={uploading}
-                className="flex items-center justify-center gap-2 py-3 border border-dashed border-line rounded-[12px] text-[13px] font-medium text-ink-secondary hover:border-brand-blue hover:text-brand-blue hover:bg-brand-blue-light transition-all disabled:opacity-50">
+              <button onClick={() => cameraInputRef.current?.click()} disabled={uploading} style={{
+                display:'flex', alignItems:'center', justifyContent:'center', gap:8,
+                padding:'12px', border:'2px dashed #E8EBF0', borderRadius:12,
+                background:'transparent', color:'#6B7889', fontSize:13, fontWeight:600, cursor:'pointer',
+              }}>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/>
                 </svg>
                 카메라
               </button>
             </div>
-            {uploading && <div className="mt-2 text-center text-[12px] text-ink-tertiary">사진 업로드 중...</div>}
+            {uploading && <div style={{ marginTop:8, textAlign:'center', fontSize:12, color:'#9AA5B5' }}>사진 업로드 중...</div>}
           </div>
         </div>
       )}
     </AppLayout>
   );
 }
+
