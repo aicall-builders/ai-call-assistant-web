@@ -14,7 +14,7 @@ function NaverCallback() {
     const state = searchParams.get('state');
     if (!code) { router.push('/login'); return; }
 
-    // state가 캘린더용 JSON인지 확인
+    // state가 캘린더용 JSON base64인지 확인
     let isCalendar = false;
     try {
       const stateObj = JSON.parse(atob(state));
@@ -28,37 +28,39 @@ function NaverCallback() {
     }
   }, []);
 
-  // ── 로그인 콜백 ──
   async function handleLoginCallback(code, state) {
     try {
       setMsg('네이버 로그인 처리 중...');
 
-      // 1) 백엔드 /auth/naver 호출
-      // 네이버는 클라이언트에서 직접 토큰 교환이 CORS로 막혀있어서
-      // code를 그대로 백엔드에 전달
+      // 네이버는 클라이언트에서 직접 토큰교환이 CORS로 막히므로
+      // 백엔드에 code + redirect_uri 전달해서 백엔드가 토큰교환
       const apiBase = getApiBase();
       const res = await fetch(`${apiBase}/auth/naver`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          provider_access_token: code,  // code를 token으로 전달 (백엔드에서 교환)
+          code,
+          state,
           redirect_uri: `${window.location.origin}/oauth/naver`,
-          state: state || '',
         }),
       });
-      if (!res.ok) throw new Error(`서버 오류: ${res.status}`);
+
+      if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(`백엔드 오류 ${res.status}: ${errText}`);
+      }
       const data = await res.json();
       const customToken = data.custom_token || data.customToken;
-      if (!customToken) throw new Error('Custom token 발급 실패');
+      if (!customToken) throw new Error('Custom token 없음');
 
-      // 2) Firebase 로그인
+      // Firebase 로그인
       await loginWithFirebaseCustomToken(customToken);
 
-      // 3) 닉네임 저장
+      // 닉네임 저장
       const nickname = data.user?.nickname || data.nickname || data.name || '사장님';
       localStorage.setItem('user_nickname', nickname);
 
-      // 4) Firebase 인증 완료 대기
+      // Firebase 완료 대기
       await new Promise((resolve) => {
         const unsub = auth.onAuthStateChanged((user) => {
           if (user) { unsub(); resolve(); }
@@ -70,11 +72,10 @@ function NaverCallback() {
     } catch (err) {
       console.error('네이버 로그인 실패:', err);
       setMsg(`❌ 로그인 실패: ${err.message}`);
-      setTimeout(() => router.push('/login'), 2000);
+      setTimeout(() => router.push('/login'), 3000);
     }
   }
 
-  // ── 캘린더 콜백 ──
   async function handleCalendarCallback(code, state) {
     try {
       setMsg('네이버 캘린더 연결 중...');
@@ -90,8 +91,7 @@ function NaverCallback() {
       if (firebaseToken) {
         headers['Authorization'] = `Bearer ${firebaseToken}`;
       } else {
-        const authHeaders = await getAuthHeaders();
-        Object.assign(headers, authHeaders);
+        Object.assign(headers, await getAuthHeaders());
       }
 
       const res = await fetch(`${getApiBase()}/calendar/connections/oauth-code`, {

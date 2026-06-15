@@ -14,20 +14,25 @@ function GoogleCallback() {
     const state = searchParams.get('state');
     if (!code) { router.push('/login'); return; }
 
-    // state 있으면 캘린더 OAuth, 없으면 로그인 OAuth
-    if (state) {
+    // state가 캘린더용 JSON base64인지 확인
+    let isCalendar = false;
+    try {
+      const stateObj = JSON.parse(atob(state));
+      if (stateObj.firebase_token) isCalendar = true;
+    } catch {}
+
+    if (isCalendar) {
       handleCalendarCallback(code, state);
     } else {
       handleLoginCallback(code);
     }
   }, []);
 
-  // ── 로그인 콜백 ──
   async function handleLoginCallback(code) {
     try {
       setMsg('구글 로그인 처리 중...');
 
-      // 1) code → access_token (구글 토큰 엔드포인트)
+      // 1) code → token (구글 토큰 엔드포인트)
       const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -39,35 +44,33 @@ function GoogleCallback() {
         }),
       });
       const tokenData = await tokenRes.json();
-      const accessToken = tokenData.access_token;
-      const idToken = tokenData.id_token;
-      if (!accessToken) throw new Error('구글 토큰 발급 실패');
+      if (!tokenData.id_token && !tokenData.access_token) {
+        throw new Error('구글 토큰 발급 실패: ' + JSON.stringify(tokenData));
+      }
 
-      // 2) 백엔드 /auth/google 호출 (앱과 동일한 흐름)
+      // 2) 백엔드 /auth/google 에 id_token 전달
       const apiBase = getApiBase();
       const res = await fetch(`${apiBase}/auth/google`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ provider_access_token: idToken || accessToken }),
+        body: JSON.stringify({ provider_access_token: tokenData.id_token || tokenData.access_token }),
       });
-      if (!res.ok) throw new Error(`서버 오류: ${res.status}`);
+      if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(`백엔드 오류 ${res.status}: ${errText}`);
+      }
       const data = await res.json();
       const customToken = data.custom_token || data.customToken;
-      if (!customToken) throw new Error('Custom token 발급 실패');
+      if (!customToken) throw new Error('Custom token 없음');
 
       // 3) Firebase 로그인
       await loginWithFirebaseCustomToken(customToken);
 
-      // 4) 구글 사용자 이름 저장
-      const userRes = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
-        headers: { Authorization: `Bearer ${accessToken}` },
-      });
-      if (userRes.ok) {
-        const userInfo = await userRes.json();
-        if (userInfo.name) localStorage.setItem('user_nickname', userInfo.name);
-      }
+      // 4) 닉네임 저장
+      const nickname = data.user?.nickname || data.name || data.nickname || '사장님';
+      localStorage.setItem('user_nickname', nickname);
 
-      // 5) Firebase 인증 완료 대기
+      // 5) Firebase 완료 대기
       await new Promise((resolve) => {
         const unsub = auth.onAuthStateChanged((user) => {
           if (user) { unsub(); resolve(); }
@@ -79,11 +82,10 @@ function GoogleCallback() {
     } catch (err) {
       console.error('구글 로그인 실패:', err);
       setMsg(`❌ 로그인 실패: ${err.message}`);
-      setTimeout(() => router.push('/login'), 2000);
+      setTimeout(() => router.push('/login'), 3000);
     }
   }
 
-  // ── 캘린더 콜백 ──
   async function handleCalendarCallback(code, state) {
     try {
       setMsg('구글 캘린더 연결 중...');
@@ -99,8 +101,7 @@ function GoogleCallback() {
       if (firebaseToken) {
         headers['Authorization'] = `Bearer ${firebaseToken}`;
       } else {
-        const authHeaders = await getAuthHeaders();
-        Object.assign(headers, authHeaders);
+        Object.assign(headers, await getAuthHeaders());
       }
 
       const res = await fetch(`${getApiBase()}/calendar/connections/oauth-code`, {
