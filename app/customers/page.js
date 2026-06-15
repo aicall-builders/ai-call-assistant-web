@@ -341,7 +341,7 @@ function CustomerDetail({ customer: c, onBack }) {
                 <span style={{ fontSize:12, fontWeight:600, padding:'2px 8px', borderRadius:4, background:'#E3EEFB', color:'#2563B5' }}>{call.category||'분류없음'}</span>
                 <span style={{ fontSize:11, color:'#9AA5B5' }}>{formatDate(call.created_at)}</span>
               </div>
-              {call.summary&&<p style={{ margin:0, fontSize:12, color:'#6B7889', lineHeight:1.5 }}>{call.summary}</p>}
+              {getSummary(call)&&<p style={{ margin:0, fontSize:12, color:'#6B7889', lineHeight:1.5 }}>{getSummary(call)}</p>}
             </Link>
             {/* 메모/사진 인라인 */}
             <CallNoteInline call={call} />

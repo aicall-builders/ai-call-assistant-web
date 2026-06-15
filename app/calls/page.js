@@ -24,6 +24,17 @@ const CATEGORY_INFO = {
 };
 const KO_MAP = {'예약':'reservation','주문':'order','취소':'cancel_refund','불만':'complaint','문의':'hours_location','기타':'other','칭찬':'positive'};
 
+
+function getSummary(call) {
+  const s = call.summary;
+  if (!s) return '';
+  if (typeof s === 'string') return s;
+  if (typeof s === 'object') {
+    return s.label || s.code || JSON.stringify(s);
+  }
+  return String(s);
+}
+
 function getCatInfo(call) {
   let info = call.extracted_info;
   if (typeof info==='string'){try{info=JSON.parse(info);}catch{info=null;}}
@@ -94,7 +105,7 @@ export default function CallsPage() {
     }
     if (search.trim()) {
       const q = search.trim().toLowerCase();
-      list = list.filter(c => c.caller_number?.includes(q) || c.summary?.toLowerCase().includes(q));
+      list = list.filter(c => c.caller_number?.includes(q) || (typeof c.summary==='string'?c.summary:getSummary(c)).toLowerCase().includes(q));
     }
     return list;
   }, [calls, filter, search]);
@@ -164,7 +175,7 @@ export default function CallsPage() {
                         <span style={{ fontSize:10, fontWeight:700, padding:'2px 6px', borderRadius:10, background:'#E53E3E', color:White }}>NEW</span>
                       )}
                     </div>
-                    {call.summary && <p style={{ margin:0, fontSize:12, color:'#6B7889', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{call.summary}</p>}
+                    {getSummary(call) && <p style={{ margin:0, fontSize:12, color:'#6B7889', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{getSummary(call)}</p>}
                     {name && <p style={{ margin:'2px 0 0', fontSize:11, color:'#9AA5B5', fontFamily:'monospace' }}>{phone}</p>}
                   </div>
                   <div style={{ flexShrink:0, textAlign:'right' }}>

@@ -24,6 +24,17 @@ const CATEGORY_INFO = {
 };
 const KO_MAP = {'예약':'reservation','주문':'order','취소':'cancel_refund','불만':'complaint','문의':'hours_location','기타':'other','칭찬':'positive'};
 
+
+function getSummary(call) {
+  const s = call.summary;
+  if (!s) return '';
+  if (typeof s === 'string') return s;
+  if (typeof s === 'object') {
+    return s.label || s.code || JSON.stringify(s);
+  }
+  return String(s);
+}
+
 function getCatInfo(call) {
   let info = call.extracted_info;
   if (typeof info==='string'){try{info=JSON.parse(info);}catch{info=null;}}
@@ -207,7 +218,7 @@ export default function DashboardPage() {
                     <span style={{ fontWeight:600,fontSize:12,color:'#1F2A3D',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap' }}>{name||phone}</span>
                     <span style={{ fontSize:9,fontWeight:600,padding:'1px 5px',borderRadius:3,background:cat.bg,color:cat.fg,flexShrink:0 }}>{cat.label}</span>
                   </div>
-                  {call.summary&&<p style={{ margin:0,fontSize:10,color:'#6B7889',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap' }}>{call.summary}</p>}
+                  {getSummary(call)&&<p style={{ margin:0,fontSize:10,color:'#6B7889',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap' }}>{getSummary(call)}</p>}
                 </div>
                 <span style={{ fontSize:10,color:'#9AA5B5',flexShrink:0 }}>{formatTime(call.created_at)}</span>
               </Link>
@@ -232,7 +243,7 @@ export default function DashboardPage() {
               </div>
               <div style={{ flex:1,minWidth:0 }}>
                 <div style={{ fontWeight:600,fontSize:12,color:'#1F2A3D',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap' }}>{c.name||c.phone}</div>
-                {c.summary&&<p style={{ margin:0,fontSize:10,color:'#6B7889',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap' }}>{c.summary}</p>}
+                {getSummary({summary:c.summary})&&<p style={{ margin:0,fontSize:10,color:'#6B7889',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap' }}>{getSummary({summary:c.summary})}</p>}
               </div>
               <span style={{ fontSize:11,fontWeight:700,color:'#1F2A3D',flexShrink:0 }}>{c.callCount}회</span>
             </Link>
