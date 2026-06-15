@@ -48,7 +48,25 @@ export default function CustomersPage() {
   useEffect(()=>{
     const unsub=watchAuthState(async(user)=>{
       if(!user){setTimeout(()=>router.push('/login'),5000);return;}
-      try{const res=await callApi.list({limit:500});setCalls(res.data.calls||[]);}
+      try{
+        const res=await callApi.list({limit:500});
+        const allCalls=res.data.calls||[];
+        setCalls(allCalls);
+        // URL 파라미터로 상세 페이지 복원
+        const phone = new URLSearchParams(window.location.search).get('phone');
+        if (phone) {
+          const map = {};
+          allCalls.filter(c=>c.caller_number).forEach(c=>{
+            if(!map[c.caller_number])map[c.caller_number]=[];
+            map[c.caller_number].push(c);
+          });
+          if (map[phone]) {
+            const cs = map[phone].sort((a,b)=>new Date(b.created_at)-new Date(a.created_at));
+            const name=cs.map(c=>{let i=c.extracted_info;if(typeof i==='string'){try{i=JSON.parse(i);}catch{i=null;}}return i?.customer_name;}).find(n=>n&&n.trim());
+            setSelected({phone,name:name||null,callCount:cs.length,lastCallAt:cs[0].created_at,lastSummary:cs[0].summary,calls:cs,isVip:cs.length>=3});
+          }
+        }
+      }
       catch(e){console.error(e);}
       finally{setLoading(false);}
     });
@@ -81,7 +99,7 @@ export default function CustomersPage() {
       {selected ? (
         <CustomerDetail
           customer={selected}
-          onBack={() => setSelected(null)}
+          onBack={() => { setSelected(null); window.history.replaceState(null,'','/customers'); }}
           
         />
       ) : (
@@ -128,7 +146,7 @@ export default function CustomersPage() {
           ) : (
             <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
               {filtered.map(c=>(
-                <button key={c.phone} onClick={()=>setSelected(c)} style={{
+                <button key={c.phone} onClick={()=>{ setSelected(c); window.history.replaceState(null,'',`/customers?phone=${encodeURIComponent(c.phone)}`); }} style={{
                   display:'flex', alignItems:'center', gap:12, background:White, borderRadius:14,
                   padding:'14px 16px', border:'none', cursor:'pointer', textAlign:'left',
                   boxShadow:'0 1px 4px rgba(0,0,0,0.06)', width:'100%',

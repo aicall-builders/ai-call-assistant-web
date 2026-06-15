@@ -18,7 +18,7 @@ const INDUSTRY_PRESETS = [
   {label:'자동차정비', emoji:'🔧', keywords:['입고','정비','엔진오일','타이어','점검','부품','견적']},
 ];
 
-const TABS=[{key:'store',label:'가게 정보'},{key:'keyword',label:'키워드'},{key:'filter',label:'통화 필터'},{key:'account',label:'계정'}];
+const TABS=[{key:'keyword',label:'키워드'},{key:'filter',label:'통화 필터'},{key:'account',label:'계정'}];
 
 const itemStyle = {
   display:'flex', alignItems:'center', justifyContent:'space-between',
@@ -29,7 +29,7 @@ const subStyle = { fontSize:12, color:'#9AA5B5', marginTop:2 };
 
 export default function SettingsPage() {
   const router = useRouter();
-  const [tab, setTab] = useState('store');
+  const [tab, setTab] = useState('keyword');
   const [stores, setStores] = useState([]);
   const [activeStoreId, setActiveStoreId] = useState(null);
   const [keywords, setKeywords] = useState([]);

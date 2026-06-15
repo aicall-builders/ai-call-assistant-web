@@ -38,15 +38,6 @@ export default function LoginPage() {
     window.location.href = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=openid%20email%20profile&state=${state}`;
   };
 
-  const handleNaverLogin = () => {
-    setError(''); setLoading('naver');
-    const clientId = process.env.NEXT_PUBLIC_NAVER_CLIENT_ID;
-    if (!clientId) { setError('네이버 로그인이 설정되지 않았습니다'); setLoading(null); return; }
-    const redirectUri = `${window.location.origin}/oauth/naver`;
-    const state = Math.random().toString(36).slice(2);
-    window.location.href = `https://nid.naver.com/oauth2.0/authorize?response_type=code&client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${state}`;
-  };
-
   return (
     <div style={{
       minHeight: '100vh',
@@ -150,18 +141,6 @@ export default function LoginPage() {
                 구글로 시작하기
               </button>
 
-              {/* 네이버 */}
-              <button onClick={handleNaverLogin} disabled={!!loading} style={{
-                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
-                padding: '13px 0', borderRadius: 12, border: 'none', cursor: 'pointer',
-                background: '#03C75A', color: White,
-                fontWeight: 700, fontSize: 14, opacity: loading ? 0.6 : 1,
-              }}>
-                {loading === 'naver' ? (
-                  <span style={{ width: 18, height: 18, border: '2px solid rgba(255,255,255,0.3)', borderTop: '2px solid white', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.8s linear infinite' }} />
-                ) : <span style={{ fontWeight: 900, fontSize: 16 }}>N</span>}
-                네이버로 시작하기
-              </button>
             </div>
 
             <p style={{ marginTop: 20, textAlign: 'center', fontSize: 11, color: '#C8CDD5', lineHeight: 1.6 }}>
