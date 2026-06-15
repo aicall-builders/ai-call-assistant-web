@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useRef, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { watchAuthState } from '@/lib/firebase';
@@ -23,8 +23,6 @@ function buildCustomers(calls) {
   return Object.entries(map).map(([phone,cs])=>{
     const sorted=[...cs].sort((a,b)=>new Date(b.created_at)-new Date(a.created_at));
     const latest=sorted[0];
-    let info=latest.extracted_info;
-    if(typeof info==='string'){try{info=JSON.parse(info);}catch{info=null;}}
     const name=cs.map(c=>{let i=c.extracted_info;if(typeof i==='string'){try{i=JSON.parse(i);}catch{i=null;}}return i?.customer_name;}).find(n=>n&&n.trim());
     return {phone,name:name||null,callCount:cs.length,lastCallAt:latest.created_at,lastSummary:latest.summary,calls:sorted,isVip:cs.length>=3};
   }).sort((a,b)=>b.callCount-a.callCount);
@@ -45,6 +43,7 @@ export default function CustomersPage() {
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('all');
   const [selected, setSelected] = useState(null);
+  const [noteModal, setNoteModal] = useState(null); // { callId, type: 'memo'|'photo' }
 
   useEffect(()=>{
     const unsub=watchAuthState(async(user)=>{
@@ -67,95 +66,108 @@ export default function CustomersPage() {
     return list;
   },[customers,filter,search]);
 
-  if (selected) {
-    return (
-      <AppLayout title={selected.name || selected.phone} rightAction={
-        <button onClick={()=>setSelected(null)} style={{ background:'rgba(255,255,255,0.15)', border:'none', borderRadius:8, padding:'6px 10px', color:'white', cursor:'pointer', fontSize:12 }}>목록으로</button>
-      }>
-        <CustomerDetail customer={selected} />
-      </AppLayout>
-    );
-  }
-
   return (
     <AppLayout title="고객 관리">
-      {/* 통계 */}
-      <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:12, marginBottom:16 }}>
-        {[['전체 고객', customers.length, '#E3EEFB','#2563B5'],
-          ['VIP (3회↑)', customers.filter(c=>c.isVip).length, '#EBE9FB','#5B4FC2'],
-          ['신규 고객', customers.filter(c=>c.callCount===1).length, '#E3FBED','#1A7A3C']].map(([label,count,bg,fg])=>(
-          <div key={label} style={{ background:bg, borderRadius:14, padding:'14px 12px', textAlign:'center' }}>
-            <div style={{ fontSize:26, fontWeight:800, color:fg }}>{loading?'-':count}</div>
-            <div style={{ fontSize:11, fontWeight:600, color:fg, opacity:0.8, marginTop:2 }}>{label}</div>
-          </div>
-        ))}
-      </div>
+      {/* 메모/사진 모달 */}
+      {noteModal && (
+        <NoteModal
+          callId={noteModal.callId}
+          initialType={noteModal.type}
+          onClose={() => setNoteModal(null)}
+        />
+      )}
 
-      {/* 검색 + 필터 */}
-      <div style={{ marginBottom:16 }}>
-        <div style={{ display:'flex', alignItems:'center', gap:8, background:White, borderRadius:12, padding:'10px 14px', marginBottom:12, boxShadow:'0 1px 4px rgba(0,0,0,0.06)' }}>
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#9AA5B5" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-          <input type="text" placeholder="이름 또는 전화번호 검색..." value={search} onChange={e=>setSearch(e.target.value)}
-            style={{ flex:1, border:'none', outline:'none', fontSize:13, color:'#1F2A3D', background:'transparent' }} />
-        </div>
-        <div style={{ display:'flex', gap:8 }}>
-          {FILTERS.map(f=>(
-            <button key={f.key} onClick={()=>setFilter(f.key)} style={{
-              padding:'6px 14px', borderRadius:20, border:'none', cursor:'pointer', fontSize:12, fontWeight:600,
-              background:filter===f.key?DarkNavy:White, color:filter===f.key?White:'#6B7889',
-              boxShadow:'0 1px 4px rgba(0,0,0,0.06)',
-            }}>{f.label}</button>
-          ))}
-        </div>
-      </div>
-
-      {/* 고객 목록 */}
-      {loading ? (
-        <div style={{ textAlign:'center', padding:'60px 0', color:'#9AA5B5', fontSize:14 }}>불러오는 중...</div>
-      ) : filtered.length===0 ? (
-        <div style={{ textAlign:'center', padding:'60px 0', color:'#9AA5B5', fontSize:14 }}>
-          <div style={{ fontSize:40, marginBottom:12 }}>👥</div>
-          고객이 없어요
-        </div>
+      {/* 고객 상세 */}
+      {selected ? (
+        <CustomerDetail
+          customer={selected}
+          onBack={() => setSelected(null)}
+          onNote={(callId, type) => setNoteModal({ callId, type })}
+        />
       ) : (
-        <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
-          {filtered.map(c=>(
-            <button key={c.phone} onClick={()=>setSelected(c)} style={{
-              display:'flex', alignItems:'center', gap:12, background:White, borderRadius:14,
-              padding:'14px 16px', border:'none', cursor:'pointer', textAlign:'left',
-              boxShadow:'0 1px 4px rgba(0,0,0,0.06)', width:'100%', transition:'box-shadow 0.15s',
-            }}>
-              <div style={{ width:44, height:44, borderRadius:'50%', background:c.isVip?'#7B6BC2':DarkNavy, display:'flex', alignItems:'center', justifyContent:'center', color:White, fontWeight:700, fontSize:16, flexShrink:0 }}>
-                {c.isVip ? '⭐' : (c.name||c.phone).slice(0,1).toUpperCase()}
+        <>
+          {/* 통계 */}
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:12, marginBottom:16 }}>
+            {[
+              ['전체 고객', customers.length, '#E3EEFB','#2563B5'],
+              ['VIP (3회↑)', customers.filter(c=>c.isVip).length, '#EBE9FB','#5B4FC2'],
+              ['신규 고객', customers.filter(c=>c.callCount===1).length, '#E3FBED','#1A7A3C'],
+            ].map(([label,count,bg,fg])=>(
+              <div key={label} style={{ background:bg, borderRadius:14, padding:'14px 12px', textAlign:'center' }}>
+                <div style={{ fontSize:26, fontWeight:800, color:fg }}>{loading?'-':count}</div>
+                <div style={{ fontSize:11, fontWeight:600, color:fg, opacity:0.8, marginTop:2 }}>{label}</div>
               </div>
-              <div style={{ flex:1, minWidth:0 }}>
-                <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:3 }}>
-                  <span style={{ fontWeight:700, fontSize:14, color:'#1F2A3D', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{c.phone}</span>
-                  {c.isVip&&<span style={{ fontSize:10, fontWeight:700, padding:'2px 6px', borderRadius:10, background:'#EBE9FB', color:'#5B4FC2' }}>VIP</span>}
-                  {c.callCount===1&&<span style={{ fontSize:10, fontWeight:700, padding:'2px 6px', borderRadius:10, background:'#E3FBED', color:'#1A7A3C' }}>신규</span>}
-                </div>
-                {c.name&&<div style={{ fontSize:12, color:'#6B7889', marginBottom:2 }}>{c.name}</div>}
-                {c.lastSummary&&<p style={{ margin:0, fontSize:11, color:'#9AA5B5', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{c.lastSummary}</p>}
-              </div>
-              <div style={{ flexShrink:0, textAlign:'right' }}>
-                <div style={{ fontSize:14, fontWeight:800, color:'#1F2A3D' }}>{c.callCount}<span style={{ fontSize:11, fontWeight:400, color:'#9AA5B5' }}>회</span></div>
-                <div style={{ fontSize:10, color:'#9AA5B5', marginTop:2 }}>{formatDate(c.lastCallAt)}</div>
-              </div>
-            </button>
-          ))}
-        </div>
+            ))}
+          </div>
+
+          {/* 검색 + 필터 */}
+          <div style={{ marginBottom:16 }}>
+            <div style={{ display:'flex', alignItems:'center', gap:8, background:White, borderRadius:12, padding:'10px 14px', marginBottom:12, boxShadow:'0 1px 4px rgba(0,0,0,0.06)' }}>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#9AA5B5" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              <input type="text" placeholder="이름 또는 전화번호 검색..." value={search} onChange={e=>setSearch(e.target.value)}
+                style={{ flex:1, border:'none', outline:'none', fontSize:13, color:'#1F2A3D', background:'transparent' }} />
+            </div>
+            <div style={{ display:'flex', gap:8 }}>
+              {FILTERS.map(f=>(
+                <button key={f.key} onClick={()=>setFilter(f.key)} style={{
+                  padding:'6px 14px', borderRadius:20, border:'none', cursor:'pointer', fontSize:12, fontWeight:600,
+                  background:filter===f.key?DarkNavy:White, color:filter===f.key?White:'#6B7889',
+                  boxShadow:'0 1px 4px rgba(0,0,0,0.06)',
+                }}>{f.label}</button>
+              ))}
+            </div>
+          </div>
+
+          {/* 고객 목록 */}
+          {loading ? (
+            <div style={{ textAlign:'center', padding:'60px 0', color:'#9AA5B5', fontSize:14 }}>불러오는 중...</div>
+          ) : filtered.length===0 ? (
+            <div style={{ textAlign:'center', padding:'60px 0', color:'#9AA5B5', fontSize:14 }}>
+              <div style={{ fontSize:40, marginBottom:12 }}>👥</div>고객이 없어요
+            </div>
+          ) : (
+            <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+              {filtered.map(c=>(
+                <button key={c.phone} onClick={()=>setSelected(c)} style={{
+                  display:'flex', alignItems:'center', gap:12, background:White, borderRadius:14,
+                  padding:'14px 16px', border:'none', cursor:'pointer', textAlign:'left',
+                  boxShadow:'0 1px 4px rgba(0,0,0,0.06)', width:'100%',
+                }}>
+                  <div style={{ width:44,height:44,borderRadius:'50%',background:c.isVip?'#7B6BC2':DarkNavy,display:'flex',alignItems:'center',justifyContent:'center',color:White,fontWeight:700,fontSize:16,flexShrink:0 }}>
+                    {c.isVip?'⭐':(c.name||c.phone).slice(0,1).toUpperCase()}
+                  </div>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:3 }}>
+                      <span style={{ fontWeight:700, fontSize:14, color:'#1F2A3D', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{c.phone}</span>
+                      {c.isVip&&<span style={{ fontSize:10, fontWeight:700, padding:'2px 6px', borderRadius:10, background:'#EBE9FB', color:'#5B4FC2' }}>VIP</span>}
+                      {c.callCount===1&&<span style={{ fontSize:10, fontWeight:700, padding:'2px 6px', borderRadius:10, background:'#E3FBED', color:'#1A7A3C' }}>신규</span>}
+                    </div>
+                    {c.name&&<div style={{ fontSize:12, color:'#6B7889', marginBottom:2 }}>{c.name}</div>}
+                    {c.lastSummary&&<p style={{ margin:0, fontSize:11, color:'#9AA5B5', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{c.lastSummary}</p>}
+                  </div>
+                  <div style={{ flexShrink:0, textAlign:'right' }}>
+                    <div style={{ fontSize:13, fontWeight:800, color:'#1F2A3D' }}>{c.callCount}<span style={{ fontSize:11, fontWeight:400, color:'#9AA5B5' }}>회</span></div>
+                    <div style={{ fontSize:10, color:'#9AA5B5', marginTop:2 }}>{formatDate(c.lastCallAt)}</div>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </>
       )}
     </AppLayout>
   );
 }
 
-function CustomerDetail({ customer: c }) {
+function CustomerDetail({ customer: c, onBack, onNote }) {
   return (
     <div>
-      {/* 고객 헤더 카드 */}
-      <div style={{ background:'#FFFFFF', borderRadius:16, padding:20, marginBottom:16, boxShadow:'0 1px 4px rgba(0,0,0,0.06)' }}>
+      <button onClick={onBack} style={{ display:'flex', alignItems:'center', gap:6, background:'none', border:'none', cursor:'pointer', color:'#6B7889', fontSize:13, fontWeight:600, marginBottom:16, padding:'6px 0' }}>
+        ← 고객 목록으로
+      </button>
+      <div style={{ background:White, borderRadius:16, padding:20, marginBottom:16, boxShadow:'0 1px 4px rgba(0,0,0,0.06)' }}>
         <div style={{ display:'flex', alignItems:'center', gap:14, marginBottom:16 }}>
-          <div style={{ width:56, height:56, borderRadius:'50%', background:c.isVip?'#7B6BC2':DarkNavy, display:'flex', alignItems:'center', justifyContent:'center', color:'white', fontWeight:700, fontSize:22 }}>
+          <div style={{ width:56,height:56,borderRadius:'50%',background:c.isVip?'#7B6BC2':DarkNavy,display:'flex',alignItems:'center',justifyContent:'center',color:White,fontWeight:700,fontSize:22 }}>
             {c.isVip?'⭐':(c.name||c.phone).slice(0,1).toUpperCase()}
           </div>
           <div>
@@ -176,12 +188,10 @@ function CustomerDetail({ customer: c }) {
         </div>
       </div>
 
-      {/* 통화 이력 */}
       <div style={{ fontWeight:700, fontSize:14, color:'#1F2A3D', marginBottom:10 }}>통화 이력</div>
       <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
         {c.calls.map(call=>(
-          <div key={call.id} style={{ background:'#FFFFFF', borderRadius:14, boxShadow:'0 1px 4px rgba(0,0,0,0.06)', overflow:'hidden' }}>
-            {/* 통화 요약 영역 — 클릭하면 상세로 */}
+          <div key={call.id} style={{ background:White, borderRadius:14, boxShadow:'0 1px 4px rgba(0,0,0,0.06)', overflow:'hidden' }}>
             <Link href={`/calls/${call.id}`} style={{ display:'block', padding:'14px 16px', textDecoration:'none' }}>
               <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:6 }}>
                 <span style={{ fontSize:12, fontWeight:600, padding:'2px 8px', borderRadius:4, background:'#E3EEFB', color:'#2563B5' }}>{call.category||'분류없음'}</span>
@@ -189,41 +199,149 @@ function CustomerDetail({ customer: c }) {
               </div>
               {call.summary&&<p style={{ margin:0, fontSize:12, color:'#6B7889', lineHeight:1.5 }}>{call.summary}</p>}
             </Link>
-
-            {/* 메모 / 사진 버튼 */}
+            {/* 메모/사진 버튼 — 페이지 이동 없이 모달로 */}
             <div style={{ display:'flex', borderTop:'1px solid #F0F2F5' }}>
-              <Link href={`/calls/${call.id}/note`} style={{
+              <button onClick={()=>onNote(call.id,'memo')} style={{
                 flex:1, display:'flex', alignItems:'center', justifyContent:'center', gap:6,
-                padding:'10px 0', textDecoration:'none',
-                color:'#6B7889', fontSize:12, fontWeight:600,
-                borderRight:'1px solid #F0F2F5',
-                transition:'background 0.15s',
-              }}
-              onMouseEnter={e=>e.currentTarget.style.background='#F8F9FA'}
-              onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
+                padding:'10px 0', background:'none', border:'none', cursor:'pointer',
+                color:'#6B7889', fontSize:12, fontWeight:600, borderRight:'1px solid #F0F2F5',
+              }}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
                   <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
                 </svg>
                 메모
-              </Link>
-              <Link href={`/calls/${call.id}/note`} style={{
+              </button>
+              <button onClick={()=>onNote(call.id,'photo')} style={{
                 flex:1, display:'flex', alignItems:'center', justifyContent:'center', gap:6,
-                padding:'10px 0', textDecoration:'none',
+                padding:'10px 0', background:'none', border:'none', cursor:'pointer',
                 color:'#6B7889', fontSize:12, fontWeight:600,
-                transition:'background 0.15s',
-              }}
-              onMouseEnter={e=>e.currentTarget.style.background='#F8F9FA'}
-              onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
+              }}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
                   <circle cx="12" cy="13" r="4"/>
                 </svg>
                 사진
-              </Link>
+              </button>
             </div>
           </div>
         ))}
+      </div>
+    </div>
+  );
+}
+
+function NoteModal({ callId, initialType, onClose }) {
+  const [type, setType] = useState(initialType);
+  const [memo, setMemo] = useState('');
+  const [photos, setPhotos] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState('');
+  const [error, setError] = useState('');
+  const fileInputRef = useRef(null);
+  const cameraInputRef = useRef(null);
+
+  useEffect(() => {
+    loadNote();
+  }, [callId]);
+
+  const loadNote = async () => {
+    setLoading(true);
+    try {
+      const res = await callApi.get(callId);
+      const call = res.data.call;
+      setMemo(call.memo || '');
+      setPhotos(call.photos || []);
+    } catch { setError('불러오지 못했습니다'); }
+    finally { setLoading(false); }
+  };
+
+  const handleSaveMemo = async () => {
+    setSaving(true);
+    try {
+      const token = localStorage.getItem('firebase_id_token');
+      await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/calls/${callId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ memo }),
+      });
+      setMessage('💾 저장됐어요!');
+      setTimeout(() => setMessage(''), 2000);
+    } catch { setError('저장 실패'); }
+    finally { setSaving(false); }
+  };
+
+  const handlePhotoUpload = async (file) => {
+    if (!file) return;
+    const url = URL.createObjectURL(file);
+    setPhotos(prev => [...prev, { id: Date.now().toString(), url, name: file.name }]);
+    setMessage('📷 사진 추가됐어요!');
+    setTimeout(() => setMessage(''), 2000);
+  };
+
+  return (
+    // 오버레이
+    <div onClick={onClose} style={{
+      position:'fixed', inset:0, background:'rgba(0,0,0,0.5)', zIndex:1000,
+      display:'flex', alignItems:'flex-end', justifyContent:'center',
+    }}>
+      <div onClick={e=>e.stopPropagation()} style={{
+        width:'100%', maxWidth:600, background:White,
+        borderRadius:'20px 20px 0 0', padding:24, maxHeight:'80vh', overflow:'auto',
+      }}>
+        {/* 핸들 */}
+        <div style={{ width:40, height:4, background:'#E8EBF0', borderRadius:2, margin:'0 auto 16px' }}/>
+
+        {/* 탭 */}
+        <div style={{ display:'flex', gap:8, marginBottom:20 }}>
+          {[['memo','✏️ 메모'],['photo','📷 사진']].map(([k,label])=>(
+            <button key={k} onClick={()=>setType(k)} style={{
+              flex:1, padding:'10px 0', borderRadius:10, border:'none', cursor:'pointer', fontSize:13, fontWeight:600,
+              background:type===k?DarkNavy:('#F0F2F5'),
+              color:type===k?White:'#6B7889',
+            }}>{label}</button>
+          ))}
+        </div>
+
+        {message && <div style={{ marginBottom:12, padding:'10px 14px', background:'#E3FBED', borderRadius:8, fontSize:13, color:'#1A7A3C' }}>{message}</div>}
+        {error && <div style={{ marginBottom:12, padding:'10px 14px', background:'#FBE3E3', borderRadius:8, fontSize:13, color:'#C23B3B' }}>{error}</div>}
+
+        {loading ? (
+          <div style={{ textAlign:'center', padding:'40px 0', color:'#9AA5B5' }}>불러오는 중...</div>
+        ) : type === 'memo' ? (
+          <div>
+            <textarea value={memo} onChange={e=>setMemo(e.target.value)}
+              placeholder="통화 관련 메모를 입력하세요..."
+              rows={6} style={{ width:'100%', padding:14, background:'#F8F9FA', borderRadius:12, border:'1px solid #E8EBF0', fontSize:14, resize:'none', outline:'none', boxSizing:'border-box', fontFamily:'inherit', lineHeight:1.6 }} />
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginTop:10 }}>
+              <span style={{ fontSize:11, color:'#C8CDD5' }}>{memo.length}자</span>
+              <button onClick={handleSaveMemo} disabled={saving} style={{ padding:'10px 24px', background:DarkNavy, border:'none', borderRadius:10, color:White, fontWeight:600, fontSize:13, cursor:'pointer' }}>
+                {saving?'저장 중...':'저장하기'}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div>
+            {photos.length > 0 && (
+              <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:8, marginBottom:14 }}>
+                {photos.map(p=>(
+                  <div key={p.id} style={{ position:'relative', aspectRatio:'1', borderRadius:10, overflow:'hidden', border:'1px solid #E8EBF0' }}>
+                    <img src={p.photo_url||p.url} alt="" style={{ width:'100%', height:'100%', objectFit:'cover' }}/>
+                    <button onClick={()=>setPhotos(prev=>prev.filter(x=>x.id!==p.id))} style={{ position:'absolute', top:4, right:4, width:22, height:22, background:'rgba(0,0,0,0.5)', border:'none', borderRadius:'50%', color:White, cursor:'pointer', fontSize:11 }}>✕</button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <input ref={fileInputRef} type="file" accept="image/*" onChange={e=>handlePhotoUpload(e.target.files?.[0])} style={{ display:'none' }}/>
+            <input ref={cameraInputRef} type="file" accept="image/*" capture="camera" onChange={e=>handlePhotoUpload(e.target.files?.[0])} style={{ display:'none' }}/>
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
+              <button onClick={()=>fileInputRef.current?.click()} style={{ padding:'14px', border:'2px dashed #E8EBF0', borderRadius:12, background:'transparent', color:'#6B7889', fontSize:13, fontWeight:600, cursor:'pointer' }}>🖼️ 갤러리</button>
+              <button onClick={()=>cameraInputRef.current?.click()} style={{ padding:'14px', border:'2px dashed #E8EBF0', borderRadius:12, background:'transparent', color:'#6B7889', fontSize:13, fontWeight:600, cursor:'pointer' }}>📸 카메라</button>
+            </div>
+          </div>
+        )}
+        <button onClick={onClose} style={{ width:'100%', marginTop:16, padding:'12px', background:'#F0F2F5', border:'none', borderRadius:10, color:'#6B7889', fontWeight:600, fontSize:13, cursor:'pointer' }}>닫기</button>
       </div>
     </div>
   );
