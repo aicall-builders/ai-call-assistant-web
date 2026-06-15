@@ -237,35 +237,39 @@ function NoteModal({ callId, initialType, onClose }) {
   const [photos, setPhotos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const fileInputRef = useRef(null);
   const cameraInputRef = useRef(null);
+  const API = process.env.NEXT_PUBLIC_API_BASE_URL;
 
-  useEffect(() => {
-    loadNote();
-  }, [callId]);
+  const getToken = () => localStorage.getItem('firebase_id_token');
+
+  useEffect(() => { loadNote(); }, [callId]);
 
   const loadNote = async () => {
     setLoading(true);
     try {
-      const res = await callApi.get(callId);
-      const call = res.data.call;
-      setMemo(call.memo || '');
-      setPhotos(call.photos || []);
+      const res = await fetch(`${API}/calls/${callId}/note`, {
+        headers: { 'Authorization': `Bearer ${getToken()}` }
+      });
+      const data = await res.json();
+      setMemo(data.memo || '');
+      setPhotos(data.photos || []);
     } catch { setError('불러오지 못했습니다'); }
     finally { setLoading(false); }
   };
 
   const handleSaveMemo = async () => {
-    setSaving(true);
+    setSaving(true); setError('');
     try {
-      const token = localStorage.getItem('firebase_id_token');
-      await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/calls/${callId}`, {
+      const res = await fetch(`${API}/calls/${callId}/note`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` },
         body: JSON.stringify({ memo }),
       });
+      if (!res.ok) throw new Error();
       setMessage('💾 저장됐어요!');
       setTimeout(() => setMessage(''), 2000);
     } catch { setError('저장 실패'); }
@@ -274,10 +278,48 @@ function NoteModal({ callId, initialType, onClose }) {
 
   const handlePhotoUpload = async (file) => {
     if (!file) return;
-    const url = URL.createObjectURL(file);
-    setPhotos(prev => [...prev, { id: Date.now().toString(), url, name: file.name }]);
-    setMessage('📷 사진 추가됐어요!');
-    setTimeout(() => setMessage(''), 2000);
+    setUploading(true); setError('');
+    try {
+      // 1. presigned URL 발급
+      const urlRes = await fetch(`${API}/calls/${callId}/photos/upload-url`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` },
+        body: JSON.stringify({ file_name: file.name }),
+      });
+      const { photo_id, upload_url, s3_key, upload_headers } = await urlRes.json();
+
+      // 2. S3에 직접 업로드
+      await fetch(upload_url, {
+        method: 'PUT',
+        headers: upload_headers,
+        body: file,
+      });
+
+      // 3. DB에 저장
+      const saveRes = await fetch(`${API}/calls/${callId}/photos`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` },
+        body: JSON.stringify({ photo_id, s3_key }),
+      });
+      const saved = await saveRes.json();
+      setPhotos(prev => [...prev, saved.photo]);
+      setMessage('📷 사진 저장됐어요!');
+      setTimeout(() => setMessage(''), 2000);
+    } catch (e) { setError('사진 업로드 실패: ' + e.message); }
+    finally { setUploading(false); }
+  };
+
+  const handleDeletePhoto = async (photoId) => {
+    if (!confirm('사진을 삭제할까요?')) return;
+    try {
+      await fetch(`${API}/calls/${callId}/photos/${photoId}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${getToken()}` },
+      });
+      setPhotos(prev => prev.filter(p => p.id !== photoId));
+      setMessage('🗑 삭제됐어요');
+      setTimeout(() => setMessage(''), 2000);
+    } catch { setError('삭제 실패'); }
   };
 
   return (
