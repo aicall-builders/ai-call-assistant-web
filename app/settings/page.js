@@ -67,6 +67,41 @@ export default function SettingsPage() {
 
   const showMsg=(text)=>{ setMsg(text); setTimeout(()=>setMsg(''),2500); };
 
+  const normalizeKeywordItem = (data, fallbackKeyword) => {
+    const fallback = String(fallbackKeyword || '').trim();
+    const raw = data?.keyword;
+
+    if (raw && typeof raw === 'object') return raw;
+
+    if (data?.id) {
+      return {
+        id: data.id,
+        keyword: typeof raw === 'string' ? raw : (data.keyword_text || data.label || fallback),
+        label: data.label || (typeof raw === 'string' ? raw : fallback),
+        action_required: data.action_required,
+        is_enabled: data.is_enabled,
+      };
+    }
+
+    return {
+      id: `${Date.now()}-${fallback}`,
+      keyword: typeof raw === 'string' ? raw : fallback,
+      label: fallback,
+      action_required: true,
+      is_enabled: true,
+    };
+  };
+
+  const getKeywordText = (kw) => {
+    if (typeof kw === 'string') return kw;
+    return kw?.keyword || kw?.label || '';
+  };
+
+  const getKeywordId = (kw) => {
+    if (typeof kw === 'string') return null;
+    return kw?.id || null;
+  };
+
   const handleSaveStore=async()=>{
     if(!storeName.trim()){showMsg('❌ 가게 이름을 입력해주세요');return;}
     setSaving(true);
@@ -85,7 +120,7 @@ export default function SettingsPage() {
     if(keywords.length>=20){showMsg('❌ 최대 20개까지 가능해요');return;}
     try{
       const res=await keywordApi.create(activeStoreId,newKw.trim());
-      setKeywords(p=>[...p,res.data?.keyword||{id:Date.now(),keyword:newKw.trim()}]);
+      setKeywords(p=>[...p, normalizeKeywordItem(res.data, newKw.trim())]);
       setNewKw(''); showMsg('✅ 추가됐어요');
     }catch{showMsg('❌ 추가 실패');}
   };
@@ -97,7 +132,7 @@ export default function SettingsPage() {
 
   const handlePreset=async(preset)=>{
     if(!activeStoreId){showMsg('❌ 가게 정보를 먼저 등록해주세요');return;}
-    const existing=new Set(keywords.map(k=>k.keyword));
+    const existing=new Set(keywords.map(getKeywordText));
     const toAdd=preset.keywords.filter(kw=>!existing.has(kw));
     if(toAdd.length===0){showMsg('✅ 이미 모두 추가된 키워드예요');return;}
     if(keywords.length+toAdd.length>20){showMsg('❌ 최대 20개를 초과해요');return;}
@@ -106,7 +141,7 @@ export default function SettingsPage() {
     for(const kw of toAdd){
       try{
         const res=await keywordApi.create(activeStoreId,kw);
-        added.push(res.data?.keyword||{id:Date.now()+kw,keyword:kw});
+        added.push(normalizeKeywordItem(res.data, kw));
       }catch(e){console.error('키워드 저장 실패:',kw,e);}
     }
     setKeywords(p=>[...p,...added]);
@@ -198,12 +233,17 @@ export default function SettingsPage() {
                   <div style={{ textAlign:'center', padding:'20px 0', color:'#9AA5B5', fontSize:13 }}>아직 키워드가 없어요</div>
                 ):(
                   <div style={{ display:'flex', flexWrap:'wrap', gap:8 }}>
-                    {keywords.map(kw=>(
-                      <span key={kw.id} style={{ display:'inline-flex', alignItems:'center', gap:6, background:'#EFF6FF', color:AccentBlue, fontSize:13, fontWeight:600, padding:'6px 12px', borderRadius:20 }}>
-                        {kw.keyword}
-                        <button onClick={()=>handleDelKw(kw.id)} style={{ background:'none', border:'none', cursor:'pointer', color:AccentBlue, fontSize:12, padding:0, lineHeight:1 }}>✕</button>
-                      </span>
-                    ))}
+                    {keywords.map((kw, idx)=>{
+                      const text = getKeywordText(kw);
+                      const id = getKeywordId(kw);
+                      if (!text) return null;
+                      return (
+                        <span key={id || `${text}-${idx}`} style={{ display:'inline-flex', alignItems:'center', gap:6, background:'#EFF6FF', color:AccentBlue, fontSize:13, fontWeight:600, padding:'6px 12px', borderRadius:20 }}>
+                          {text}
+                          <button onClick={()=>id ? handleDelKw(id) : setKeywords(p=>p.filter((_, i)=>i!==idx))} style={{ background:'none', border:'none', cursor:'pointer', color:AccentBlue, fontSize:12, padding:0, lineHeight:1 }}>✕</button>
+                        </span>
+                      );
+                    })}
                   </div>
                 )}
               </div>
