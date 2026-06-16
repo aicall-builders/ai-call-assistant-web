@@ -187,7 +187,7 @@ export default function CallsPage() {
                 {call.summary && (
                   <div style={{ marginTop:10, background:'#F0F7FF', borderRadius:8, padding:'8px 12px' }}>
                     <div style={{ fontSize:10, fontWeight:700, color:AccentBlue, marginBottom:3 }}>✨ AI 요약</div>
-                    <p style={{ margin:0, fontSize:12, color:'#2D4A7A', lineHeight:1.5 }}>{call.summary}</p>
+                    <p style={{ margin:0, fontSize:12, color:'#2D4A7A', lineHeight:1.5 }}>{getSummary(call)}</p>
                   </div>
                 )}
               </Link>
