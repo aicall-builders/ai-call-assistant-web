@@ -446,6 +446,19 @@ const parseInternalKeywords = (keywords) => {
                   ))}
                 </div>
               )}
+              <div className="flex flex-wrap gap-1.5 mt-3">
+                {Object.entries(parseInternalKeywords(call.internal_keywords)).map(([key, value]) => {
+                  if (key.startsWith('_')) return null;
+                  if (typeof value !== 'string' && typeof value !== 'number') return null;
+                  if (!value) return null;
+                  return (
+                    <div key={key} className="flex items-center gap-1.5 bg-surface-muted rounded-full px-3 py-1.5">
+                      <span className="text-[11px] text-ink-tertiary">{key}</span>
+                      <span className="text-[12px] font-semibold text-ink-primary">{String(value)}</span>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           </section>
         )}
