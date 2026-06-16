@@ -343,7 +343,7 @@ export default function DashboardPage() {
             const isActive = activeNav === key;
             return (
               <div key={key} onClick={() => handleNavSelect(key)} style={{
-                marginLeft:4, padding: isActive ? '16px 8px' : '13px 8px',
+                marginLeft:20, padding: isActive ? '16px 8px' : '13px 8px',
                 background: isActive ? C.white : C.grayBg,
                 borderRadius:20,
                 display:'flex', flexDirection:'column', alignItems:'center', gap:5,
@@ -357,7 +357,7 @@ export default function DashboardPage() {
         </div>
 
         {/* 콘텐츠 카드 */}
-        <div style={{ position:'relative', zIndex:2, marginLeft:48, background:C.white, borderTopLeftRadius:24, borderBottomLeftRadius:24, padding:16, minHeight:440 }}>
+        <div style={{ position:'relative', zIndex:2, marginLeft:20, background:C.white, borderTopLeftRadius:24, borderBottomLeftRadius:24, padding:16, minHeight:440 }}>
 
           {/* 알림 */}
           {error   && <div style={{ marginBottom:10, padding:'10px 14px', background:'#FEF2F2', border:'1px solid #FCA5A5', borderRadius:8, fontSize:12, color:'#991B1B' }}>{error}</div>}
