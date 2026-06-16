@@ -184,6 +184,19 @@ export default function CallDetailPage() {
     try { return JSON.parse(keywords); } catch { return []; }
   };
 
+  const getSummary = (s) => {
+  if (!s) return '';
+  if (typeof s === 'string') return s;
+  if (typeof s === 'object') return s.label || s.code || s.text || '';
+  return String(s);
+};
+
+const parseInternalKeywords = (keywords) => {
+  if (!keywords) return {};
+  if (typeof keywords === 'object' && !Array.isArray(keywords)) return keywords;
+  try { return JSON.parse(keywords); } catch { return {}; }
+};
+
   const sttLines = useMemo(() => {
     if (!call?.stt_result) return [];
     return call.stt_result.split('\n').map((line, idx) => {
@@ -409,7 +422,7 @@ export default function CallDetailPage() {
         </section>
 
         {/* ───────── AI 요약 ───────── */}
-        {call.summary && (
+        {getSummary(call.summary) && (
           <section className="bg-white rounded-[16px] border border-line mb-4 overflow-hidden animate-fade-up anim-delay-200">
             <div className="px-5 pt-4 pb-3 flex items-center justify-between">
               <h2 className="text-[14px] font-bold text-ink-primary tracking-tight inline-flex items-center gap-1.5">
@@ -419,7 +432,7 @@ export default function CallDetailPage() {
             </div>
             <div className="px-5 pb-5">
               <div className="bg-brand-blue-light rounded-[12px] px-4 py-3.5 text-[14px] text-ink-primary leading-[1.65]">
-                {call.summary}
+                {getSummary(call.summary)}
               </div>
               {keywords.length > 0 && (
                 <div className="flex flex-wrap gap-1.5 mt-3">
