@@ -259,7 +259,9 @@ const parseInternalKeywords = (keywords) => {
   const sentimentInfo = call.sentiment ? SENTIMENT_INFO[call.sentiment] : null;
   const categoryEmoji = call.category ? (CATEGORY_EMOJI[call.category] || '📌') : null;
   const keywords = parseKeywords(call.keywords);
-  const displayNumber = call.caller_number || '발신번호 없음';
+  const displayNumber = call.caller_name
+    ? (call.caller_number ? `${call.caller_name} (${call.caller_number})` : call.caller_name)
+    : (call.caller_number || '발신번호 없음');
   const progressPct = audioDuration > 0 ? (currentTime / audioDuration) * 100 : 0;
 
   return (

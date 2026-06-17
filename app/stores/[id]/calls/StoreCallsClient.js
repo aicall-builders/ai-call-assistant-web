@@ -420,7 +420,7 @@ export default function StoreCallsPage() {
                             const cat = call.caller_category || 'UNCLASSIFIED';
                             // 안드 정책: PERSONAL/UNCLASSIFIED는 마스킹
                             if (cat === 'BUSINESS') {
-                              return call.caller_number || '발신번호 없음';
+                              return call.caller_name || call.caller_number || '발신번호 없음';
                             }
                             return call.caller_number ? '*** ' + call.caller_number.slice(-4) : '통화 녹음 ***';
                           })()}
