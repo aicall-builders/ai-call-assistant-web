@@ -29,6 +29,17 @@ export default function OAuthCallbackClient({ provider }) {
       return;
     }
 
+    // 앱에서 시작한 캘린더 연동(state가 "app:"으로 시작)은 웹이 직접 완료하지 않고,
+    // code/state를 앱 딥링크로 그대로 넘긴다. 실제 토큰 교환은 앱이 자기 토큰으로 수행.
+    if (state.startsWith('app:')) {
+      setMessage('앱으로 돌아가는 중...');
+      const appUrl =
+        `callrecorder://oauth/${provider}` +
+        `?code=${encodeURIComponent(code)}&state=${encodeURIComponent(state)}`;
+      window.location.href = appUrl;
+      return;
+    }
+
     const kind = state.startsWith('calendar:') ? 'calendar' : 'login';
     consumeOAuthState(state);
 
