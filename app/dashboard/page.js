@@ -183,7 +183,7 @@ export default function DashboardPage() {
   }
 
   return (
-    <main className="min-h-screen bg-[#5f6071] flex items-start justify-center px-6 py-12">
+    <main className="min-h-screen bg-[#5f6071] flex flex-col items-center px-6 pt-12">
       <input
         ref={fileInputRef}
         type="file"
@@ -193,29 +193,8 @@ export default function DashboardPage() {
         className="hidden"
       />
 
-      <div className="relative translate-x-[44px]">
-        {/* 사이드 nav */}
-        <nav className="absolute right-full top-0 flex flex-col gap-[16px] items-end w-[88px] py-[24px]">
-          {NAV_ITEMS.map((item) => {
-            const active = item.id === 'home';
-            return (
-              <button
-                key={item.id}
-                onClick={() => !active && handleNavClick(item.id)}
-                className={`w-full rounded-l-[24px] flex flex-col items-center justify-center gap-[8px] pl-[16px] pr-[8px] py-[16px] transition-colors ${
-                  active ? 'bg-white text-black cursor-default' : 'bg-[#e4e4e4] text-[#7e7e7e] hover:bg-[#d9d9d9]'
-                }`}
-              >
-                <NavIcon id={item.id} />
-                <span className="text-[14px] font-medium text-center">{item.label}</span>
-              </button>
-            );
-          })}
-        </nav>
-
-        {/* 본문 컬럼 */}
-        <div className="w-[640px] flex flex-col items-center">
-          {/* 헤더 */}
+      <div className="relative translate-x-[44px] w-[640px] flex flex-col flex-1">
+        {/* 헤더 */}
           <header className="h-[56px] w-full flex items-center justify-between relative">
             <div className="flex items-center justify-center px-[16px]">
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="6" y="2" width="9" height="20" rx="2" /><path d="M18 9v6M21 7v10" /></svg>
@@ -251,8 +230,26 @@ export default function DashboardPage() {
             </div>
           )}
 
-          {/* 흰 카드 */}
-          <section className="relative bg-white w-full rounded-t-[24px] p-[32px] text-[#343659]">
+          {/* 흰 카드 — 화면 바닥까지 (flex-1), 상단만 둥글게 */}
+          <section className="relative bg-white w-full rounded-t-[24px] p-[32px] text-[#343659] flex-1">
+            {/* 사이드 nav — 카드 좌측, 카드 상단 기준 */}
+            <nav className="absolute right-full top-[30px] flex flex-col gap-[16px] items-end w-[88px]">
+              {NAV_ITEMS.map((item) => {
+                const active = item.id === 'home';
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => !active && handleNavClick(item.id)}
+                    className={`w-full rounded-l-[24px] flex flex-col items-center justify-center gap-[8px] pl-[16px] pr-[8px] py-[16px] transition-colors ${
+                      active ? 'bg-white text-black cursor-default' : 'bg-[#e4e4e4] text-[#7e7e7e] hover:bg-[#d9d9d9]'
+                    }`}
+                  >
+                    <NavIcon id={item.id} />
+                    <span className="text-[14px] font-medium text-center">{item.label}</span>
+                  </button>
+                );
+              })}
+            </nav>
             <div className="flex gap-[24px] items-start">
               {/* 좌측 컬럼 */}
               <div className="flex-1 min-w-0 flex flex-col gap-[54px]">
@@ -371,7 +368,6 @@ export default function DashboardPage() {
               </div>
             </div>
           </section>
-        </div>
       </div>
     </main>
   );
