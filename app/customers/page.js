@@ -186,7 +186,7 @@ export default function CustomersPage() {
   <PageShell
     title="고객관리"
     active="customers"
-    top={<div className="h-[200px]" />}
+    top={<div className="h-[50px]" />}
   >
     <input ref={photoInputRef} type="file" accept="image/*" onChange={handlePhotoSelect} className="hidden" />
       <input ref={photoInputRef} type="file" accept="image/*" onChange={handlePhotoSelect} className="hidden" />

@@ -184,7 +184,7 @@ export default function CallsPage() {
 
   const top = (
     <section className="w-full flex flex-col items-center pt-[16px] pb-[24px]">
-      <div className="w-[328px] flex flex-col gap-[10px]">
+      <div className="w-[332px] flex flex-col gap-[10px]">
         <div>
           <h2 className="text-[20px] font-bold text-white">통화 분석 목록</h2>
           <p className="text-[12px] text-[#dbdeeb] mt-[4px]">검색과 필터로 분석된 통화 내역을 빠르게 확인하세요.</p>
@@ -242,7 +242,7 @@ export default function CallsPage() {
 
         <div className="flex gap-[24px] items-start">
           {/* 통화 리스트 */}
-          <div className="flex-1 min-w-0 flex flex-col gap-[24px]">
+          <div className="flex-1 min-w-0 flex flex-col gap-[24px] max-h-[calc(100vh-320px)] overflow-y-auto no-scrollbar">
             {loading ? (
               <div className="py-12 text-center text-[12px] text-[#99a1b0]">불러오는 중...</div>
             ) : error ? (
@@ -323,7 +323,7 @@ export default function CallsPage() {
           </div>
 
           {/* 선택 통화 상세 */}
-          <div className="w-[216px] flex-none flex flex-col">
+          <div className="w-[216px] flex-none flex flex-col max-h-[calc(100vh-320px)] overflow-y-auto no-scrollbar">
             <div className="flex items-center justify-between pb-[10px] border-b border-[#343659]">
               <span className="text-[14px] font-bold text-[#343659]">선택 통화 요약</span>
               {selected && <Link href={`/calls/${selected.id}`} className="text-[11px] font-medium text-[#343659] hover:text-[#1c6bd4]">상세보기 →</Link>}
