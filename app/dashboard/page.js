@@ -211,7 +211,10 @@ export default function DashboardPage() {
   }, [monthEvents, calYear, calMon]);
 
   function shiftMonth(delta) { setCalMonth((p) => new Date(p.getFullYear(), p.getMonth() + delta, 1)); }
-  function handleNavClick(id) { if (id === 'settings') handleLogout(); }
+  function handleNavClick(id) {
+    const routes = { calls: '/calls', customers: '/customers', calendar: '/calendar', settings: '/settings' };
+    if (routes[id]) router.push(routes[id]);
+  }
 
   if (authLoading) {
     return <main className="min-h-screen flex items-center justify-center bg-[#5f6071] text-sm text-white/70">로딩 중...</main>;
