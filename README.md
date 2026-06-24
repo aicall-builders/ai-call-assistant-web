@@ -87,7 +87,7 @@
 
 | 키 | 용도 |
 |------|------|
-| `NEXT_PUBLIC_API_BASE_URL` | 백엔드 API Gateway 진입점 |
+| `NEXT_PUBLIC_API_BASE_URL` | 백엔드 API Gateway 진입점 (REST API, `/prod`) |
 | `NEXT_PUBLIC_KAKAO_JS_KEY` | 카카오 JS SDK 초기화 (공개 키) |
 | `NEXT_PUBLIC_FIREBASE_API_KEY` | Firebase Web API Key (공개 키) |
 | `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN` | Firebase Auth 도메인 |
@@ -162,9 +162,9 @@ const { data } = await api.get(`/calls/${callId}/audio`);
 
 ## 🎨 데이터 동기화 전략
 
-**Phase 1 (현재)**: 페이지 진입 시 axios로 최신 데이터 1회 로드. 처리 중 통화는 새로고침/재방문 시 갱신.백엔드 Lambda 5분 주기 폴링으로 STT 실패 자동 복구 처리 중
+**Phase 1 (현재)**: 페이지 진입 시 axios로 최신 데이터를 1회 로드합니다. 처리 중인 통화는 새로고침/재방문 시 갱신됩니다. STT 실패 건은 백엔드 Lambda가 5분 주기 폴링으로 자동 복구합니다.
 
-**Phase 2 (계획)**: 웹 클라이언트 실시간 동기화 (WebSocket)
+**Phase 2 (계획)**: 웹 클라이언트 실시간 동기화 (WebSocket).
 
 ---
 
