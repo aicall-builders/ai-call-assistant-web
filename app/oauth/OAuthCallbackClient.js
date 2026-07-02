@@ -34,7 +34,7 @@ export default function OAuthCallbackClient({ provider }) {
     if (state.startsWith('app:')) {
       setMessage('앱으로 돌아가는 중...');
       const appUrl =
-        `callrecorder://oauth/${provider}` +
+        `callrecorder://oauth/${provider}/` +
         `?code=${encodeURIComponent(code)}&state=${encodeURIComponent(state)}`;
       window.location.href = appUrl;
       return;
@@ -45,7 +45,7 @@ export default function OAuthCallbackClient({ provider }) {
 
     async function run() {
       try {
-        const redirectUri = `${window.location.origin}/oauth/${provider}`;
+        const redirectUri = `${window.location.origin}/oauth/${provider}/`;
         if (kind === 'calendar') {
           setMessage(`${providerLabel(provider)} 캘린더 연결 중...`);
           await calendarApi.completeOAuth({
