@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import PageShell from '@/app/components/PageShell';
-import { callApi, notesApi } from '@/lib/api';
+import { callApi, notesApi, customerApi } from '@/lib/api';
 
 function parseInfo(call) {
   let info = call?.extracted_info;
@@ -31,6 +31,14 @@ const GRADE_BADGE = { vip: 'bg-[#fef3c7] text-[#b45309]', regular: 'bg-[#dbeafe]
 const CAT_BADGE = { '예약': 'bg-[#edf4ff] text-[#1c6bd4]', '문의': 'bg-[#e5f7f0] text-[#0d8061]', '취소': 'bg-[#fdecec] text-[#d94038]', '불만': 'bg-[#fdecec] text-[#d94038]' };
 function catCls(c) { return CAT_BADGE[c] || 'bg-[#f1f2f6] text-[#343659]'; }
 
+const CONSENT_LABEL = { consented: '동의', declined: '거절', pending: '대기' };
+const CONSENT_BADGE = {
+  consented: 'bg-[#e5f7f0] text-[#0d8061]',
+  declined: 'bg-[#fdecec] text-[#d94038]',
+  pending: 'bg-[#fef3c7] text-[#b45309]',
+};
+function consentCls(status) { return CONSENT_BADGE[status] || CONSENT_BADGE.pending; }
+
 export default function CustomersPage() {
   const [calls, setCalls] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -38,6 +46,7 @@ export default function CustomersPage() {
   const [filter, setFilter] = useState('all');
   const [query, setQuery] = useState('');
   const [selectedPhone, setSelectedPhone] = useState(null);
+  const [profiles, setProfiles] = useState({});
 
   // 통화별 메모/사진 (callId -> {memo, photos, loading})
   const [notes, setNotes] = useState({});
@@ -70,6 +79,26 @@ export default function CustomersPage() {
       const name = list.map((c) => parseInfo(c).customer_name).find((n) => n && String(n).trim());
       return { phone, name: name || null, calls: sorted, count: list.length, grade: grade(list.length) };
     }).sort((a, b) => b.count - a.count);
+  }, [calls]);
+
+  useEffect(() => {
+    const phones = Array.from(new Set(calls.map((c) => c.caller_number).filter(Boolean)));
+    if (!phones.length) { setProfiles({}); return; }
+
+    let alive = true;
+    (async () => {
+      const entries = await Promise.all(phones.map(async (phone) => {
+        try {
+          const res = await customerApi.get(phone);
+          return [phone, res.data?.profile || {}];
+        } catch {
+          return [phone, {}];
+        }
+      }));
+      if (alive) setProfiles(Object.fromEntries(entries));
+    })();
+
+    return () => { alive = false; };
   }, [calls]);
 
   const gradeCounts = useMemo(() => {
@@ -232,6 +261,9 @@ export default function CustomersPage() {
                     <div className="flex items-center justify-between gap-[6px]">
                       <span className="text-[13px] font-bold text-[#343659] truncate">{c.name || c.phone}</span>
                       <span className="text-[11px] text-[#99a1b0] flex-none">{c.count}통화</span>
+                       <span className={`text-[10px] px-[7px] py-[2px] rounded-full font-semibold flex-none ${consentCls(c.consentStatus)}`}>
+                         {CONSENT_LABEL[c.consentStatus] || '대기'}
+                       </span>
                     </div>
                     {showPhone && <div className="mt-[4px] text-[11px] text-[#99a1b0] truncate">{c.phone}</div>}
                   </button>
@@ -267,7 +299,9 @@ export default function CustomersPage() {
                   <span className="text-[13px] font-bold text-[#343659]">✦ AI 종합요약</span>
                   <span className="text-[10px] text-[#99a1b0]">통화 기록 기반</span>
                 </div>
-                <p className="mt-[10px] text-[12px] leading-[1.6] text-[#343659]">{aiSummary}</p>
+                <p className="mt-[10px] text-[12px] leading-[1.6] text-[#343659]">
+                   {customer.consentStatus === 'consented' ? aiSummary : '동의 완료 후 AI 고객 분석을 사용할 수 있습니다.'}
+                 </p>
               </div>
 
               {/* 날짜별 통화 히스토리 (각 항목 밑에 메모/사진 항상 표시) */}
