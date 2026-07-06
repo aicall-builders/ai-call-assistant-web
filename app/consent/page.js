@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 
 const API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL || "").replace(/\/$/, "");
 
@@ -14,7 +14,6 @@ export default function ConsentPage() {
     setToken(searchParams.get("token") || "");
   }, []);
 
-  const tokenLabel = useMemo(() => token || "-", [token]);
 
   const submitConsent = async (agreed) => {
     if (!token) {
@@ -75,7 +74,7 @@ export default function ConsentPage() {
           </p>
 
           <div className="mt-4 rounded-xl bg-slate-50 p-3 text-xs text-slate-500">
-            token: {tokenLabel}
+            동의 요청 정보가 확인되었습니다.
           </div>
         </section>
 
