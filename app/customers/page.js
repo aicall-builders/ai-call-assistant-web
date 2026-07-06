@@ -81,26 +81,6 @@ export default function CustomersPage() {
     }).sort((a, b) => b.count - a.count);
   }, [calls]);
 
-  useEffect(() => {
-    const phones = Array.from(new Set(calls.map((c) => c.caller_number).filter(Boolean)));
-    if (!phones.length) { setProfiles({}); return; }
-
-    let alive = true;
-    (async () => {
-      const entries = await Promise.all(phones.map(async (phone) => {
-        try {
-          const res = await customerApi.get(phone);
-          return [phone, res.data?.profile || {}];
-        } catch {
-          return [phone, {}];
-        }
-      }));
-      if (alive) setProfiles(Object.fromEntries(entries));
-    })();
-
-    return () => { alive = false; };
-  }, [calls]);
-
   const gradeCounts = useMemo(() => {
     const g = { all: customers.length, vip: 0, regular: 0, new: 0 };
     customers.forEach((c) => { g[c.grade] += 1; });
