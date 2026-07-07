@@ -25,9 +25,19 @@ function callShortDesc(c) {
   return info.special_notes || c.summary || c.category || '통화 분석';
 }
 
-function grade(count) { if (count >= 5) return 'vip'; if (count >= 2) return 'regular'; return 'new'; }
-const GRADE_LABEL = { vip: 'VIP', regular: '단골', new: '신규' };
-const GRADE_BADGE = { vip: 'bg-[#fef3c7] text-[#b45309]', regular: 'bg-[#dbeafe] text-[#1c6bd4]', new: 'bg-[#f1f2f6] text-[#7e7e7e]' };
+function grade(count) {
+  if (count >= 20) return 'vip';
+  if (count >= 10) return 'regular';
+  if (count >= 2) return 'normal';
+  return 'new';
+}
+const GRADE_LABEL = { vip: 'VIP', regular: '단골', normal: '일반', new: '신규' };
+const GRADE_BADGE = {
+  vip: 'bg-[#fef3c7] text-[#b45309]',
+  regular: 'bg-[#dbeafe] text-[#1c6bd4]',
+  normal: 'bg-[#f1f2f6] text-[#343659]',
+  new: 'bg-[#f1f2f6] text-[#7e7e7e]'
+};
 const CAT_BADGE = { '예약': 'bg-[#edf4ff] text-[#1c6bd4]', '문의': 'bg-[#e5f7f0] text-[#0d8061]', '취소': 'bg-[#fdecec] text-[#d94038]', '불만': 'bg-[#fdecec] text-[#d94038]' };
 function catCls(c) { return CAT_BADGE[c] || 'bg-[#f1f2f6] text-[#343659]'; }
 
@@ -47,6 +57,8 @@ export default function CustomersPage() {
   const [query, setQuery] = useState('');
   const [selectedPhone, setSelectedPhone] = useState(null);
   const [profiles, setProfiles] = useState({});
+  const [selectedProfile, setSelectedProfile] = useState(null);
+  const [customerHistory, setCustomerHistory] = useState([]);
 
   // 통화별 메모/사진 (callId -> {memo, photos, loading})
   const [notes, setNotes] = useState({});
@@ -60,8 +72,18 @@ export default function CustomersPage() {
     (async () => {
       setLoading(true); setError('');
       try {
-        const res = await callApi.list({ limit: 200 });
-        setCalls(res.data?.calls || []);
+        const [callRes, customerRes] = await Promise.all([
+          callApi.list({ limit: 200 }),
+          customerApi.list().catch(() => ({ data: { customers: [] } })),
+        ]);
+
+        setCalls(callRes.data?.calls || []);
+
+        const profileMap = {};
+        (customerRes.data?.customers || []).forEach((profile) => {
+          if (profile.phone) profileMap[String(profile.phone)] = profile;
+        });
+        setProfiles(profileMap);
       } catch (err) {
         console.error(err);
         setError(err.response?.data?.error || err.response?.data?.message || err.message || '데이터를 불러오지 못했습니다.');
@@ -73,17 +95,57 @@ export default function CustomersPage() {
 
   const customers = useMemo(() => {
     const groups = {};
-    for (const c of calls) { if (!c.caller_number) continue; (groups[c.caller_number] ||= []).push(c); }
-    return Object.entries(groups).map(([phone, list]) => {
+    for (const c of calls) {
+      if (!c.caller_number) continue;
+      (groups[c.caller_number] ||= []).push(c);
+    }
+
+    const callCustomers = Object.entries(groups).map(([phone, list]) => {
       const sorted = [...list].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-      const name = list.map((c) => parseInfo(c).customer_name).find((n) => n && String(n).trim());
-      return { phone, name: name || null, calls: sorted, count: list.length, grade: grade(list.length) };
-    }).sort((a, b) => Number(b.isPinned) - Number(a.isPinned) || b.count - a.count);
-  }, [calls]);
+      const profile = profiles[phone] || {};
+      const name =
+        profile.name ||
+        profile.customer_name ||
+        list.map((c) => parseInfo(c).customer_name).find((n) => n && String(n).trim());
+
+      const count = Math.max(Number(profile.call_count || 0), list.length);
+
+      return {
+        ...profile,
+        phone,
+        name: name || null,
+        calls: sorted,
+        count,
+        grade: grade(count),
+        isPinned: Boolean(profile.is_pinned || profile.isPinned),
+        consentStatus: profile.consent_status || profile.consentStatus || 'pending',
+      };
+    });
+
+    const callPhones = new Set(callCustomers.map((c) => String(c.phone)));
+    const pinnedOnly = Object.values(profiles)
+      .filter((p) => Boolean(p.is_pinned || p.isPinned) && !callPhones.has(String(p.phone)))
+      .map((p) => {
+        const count = Number(p.call_count || 0);
+        return {
+          ...p,
+          phone: p.phone,
+          name: p.name || p.customer_name || null,
+          calls: [],
+          count,
+          grade: grade(count),
+          isPinned: true,
+          consentStatus: p.consent_status || p.consentStatus || 'pending',
+        };
+      });
+
+    return [...pinnedOnly, ...callCustomers]
+      .sort((a, b) => Number(b.isPinned) - Number(a.isPinned) || b.count - a.count);
+  }, [calls, profiles]);
 
   const gradeCounts = useMemo(() => {
-    const g = { all: customers.length, vip: 0, regular: 0, new: 0 };
-    customers.forEach((c) => { g[c.grade] += 1; });
+    const g = { all: customers.length, vip: 0, regular: 0, normal: 0, new: 0 };
+    customers.forEach((c) => { if (g[c.grade] !== undefined) g[c.grade] += 1; });
     return g;
   }, [customers]);
 
@@ -107,13 +169,38 @@ export default function CustomersPage() {
     await customerApi.update(customer.phone, { is_pinned: next });
     setProfiles((prev) => ({
       ...prev,
-      [customer.phone]: { ...(prev[customer.phone] || {}), is_pinned: next, isPinned: next },
+      [customer.phone]: { ...(prev[customer.phone] || {}), phone: customer.phone, is_pinned: next, isPinned: next },
     }));
     setSelectedProfile((prev) => prev ? {
       ...prev,
       profile: { ...(prev.profile || {}), is_pinned: next, isPinned: next },
     } : prev);
   };
+
+  useEffect(() => {
+    if (!selectedPhone) {
+      setSelectedProfile(null);
+      setCustomerHistory([]);
+      return;
+    }
+
+    let alive = true;
+    (async () => {
+      const [detailRes, historyRes] = await Promise.all([
+        customerApi.get(selectedPhone).catch(() => ({ data: {} })),
+        customerApi.history(selectedPhone).catch(() => ({ data: { items: [] } })),
+      ]);
+      if (!alive) return;
+
+      setSelectedProfile({
+        profile: detailRes.data?.profile || {},
+        analysis: detailRes.data?.analysis || {},
+      });
+      setCustomerHistory(historyRes.data?.items || []);
+    })();
+
+    return () => { alive = false; };
+  }, [selectedPhone]);
 
   // 고객 선택 시 그 고객 모든 통화의 메모/사진 일괄 로드
   useEffect(() => {
@@ -142,14 +229,20 @@ export default function CustomersPage() {
 
   const aiSummary = useMemo(() => {
     if (!customer) return '';
-    const nm = customer.name || customer.phone;
+
+    const serverAnalysis = selectedProfile?.analysis || {};
+    if (serverAnalysis.status === 'generating') return 'AI 고객 분석을 업데이트하는 중입니다.';
+    if (serverAnalysis.locked) return serverAnalysis.message || '동의 완료 후 AI 고객 분석을 사용할 수 있습니다.';
+    if (serverAnalysis.analysis) return serverAnalysis.analysis;
+
+    const nm = selectedProfile?.profile?.name || customer.name || customer.phone;
     const top = mostFrequent(customer.calls.map((c) => c.category).filter(Boolean));
     const res = customer.calls.filter((c) => c.category === '예약').length;
     const parts = [`${nm} 고객은 총 ${customer.count}건의 통화 기록이 있습니다.`];
     if (top) parts.push(`주로 '${top}' 관련 내용이 많았어요.`);
     if (res) parts.push(`예약 통화가 ${res}건 있었습니다.`);
     return parts.join(' ');
-  }, [customer]);
+  }, [customer, selectedProfile]);
 
   function setMemoFor(callId, val) {
     setNotes((prev) => ({ ...prev, [callId]: { ...(prev[callId] || { memo: '', photos: [] }), memo: val } }));
@@ -212,7 +305,6 @@ export default function CustomersPage() {
     top={<div className="h-[50px]" />}
   >
     <input ref={photoInputRef} type="file" accept="image/*" onChange={handlePhotoSelect} className="hidden" />
-      <input ref={photoInputRef} type="file" accept="image/*" onChange={handlePhotoSelect} className="hidden" />
 
       <div className="px-[24px] pt-[24px]">
         <p className="text-[13px] text-[#99a1b0]">고객별 통화 히스토리와 메모를 한 곳에서 관리하세요.</p>
@@ -232,6 +324,10 @@ export default function CustomersPage() {
               className="w-full h-[40px] bg-white border border-[#d6d9e5] rounded-[12px] pl-[34px] pr-[12px] text-[12px] text-[#343659] placeholder:text-[#99a1b0] outline-none focus:border-[#1c6bd4]"
             />
           </div>
+
+          <p className="text-[10px] text-[#99a1b0] px-[2px]">
+            VIP 20+ · 단골 10+ · 일반 2~9 · 신규 1
+          </p>
 
           <div className="flex flex-col gap-[8px] max-h-[calc(80vh-260px)] overflow-y-auto no-scrollbar">
             {loading ? (
@@ -281,6 +377,9 @@ export default function CustomersPage() {
                 </div>
                 <div className="mt-[12px] flex items-baseline gap-[10px] flex-wrap">
                   <span className="text-[18px] font-bold text-[#343659]">{customer.name || customer.phone}</span>
+                  <button onClick={togglePinned} className="text-[18px] text-[#343659] leading-none">
+                    {customer.isPinned ? '★' : '☆'}
+                  </button>
                   {customer.name && customer.name !== customer.phone && (
                     <span className="text-[13px] text-[#99a1b0]">{customer.phone}</span>
                   )}
@@ -297,6 +396,35 @@ export default function CustomersPage() {
                    {customer.consentStatus === 'consented' ? aiSummary : '동의 완료 후 AI 고객 분석을 사용할 수 있습니다.'}
                  </p>
               </div>
+
+              {customerHistory.filter((x) => x.type === 'manual_memo').length > 0 && (
+                <div className="bg-white rounded-[16px] border border-[#eceef3] p-[16px]">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[13px] font-bold text-[#343659]">메모/이미지 히스토리</span>
+                    <span className="text-[10px] text-[#99a1b0]">
+                      {customerHistory.filter((x) => x.type === 'manual_memo').length}건
+                    </span>
+                  </div>
+                  <div className="mt-[10px] flex flex-col gap-[10px]">
+                    {customerHistory.filter((x) => x.type === 'manual_memo').slice(0, 5).map((item) => (
+                      <div key={item.id} className="rounded-[12px] bg-[#f7f8fb] p-[12px]">
+                        <p className="text-[12px] leading-[1.5] text-[#343659] whitespace-pre-wrap">
+                          {item.memo || '메모 내용 없음'}
+                        </p>
+                        {item.photos?.length > 0 && (
+                          <div className="mt-[8px] flex gap-[6px] flex-wrap">
+                            {item.photos.slice(0, 5).map((photo) => (
+                              <button key={photo.id} onClick={() => setZoomPhoto(photo.url)} className="w-[44px] h-[44px] rounded-[8px] overflow-hidden border border-[#eceef3]">
+                                <img src={photo.url} alt="메모 사진" className="w-full h-full object-cover" />
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* 날짜별 통화 히스토리 (각 항목 밑에 메모/사진 항상 표시) */}
               <div className="flex flex-col">
