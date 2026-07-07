@@ -123,8 +123,8 @@ export default function CustomersPage() {
     });
 
     const callPhones = new Set(callCustomers.map((c) => String(c.phone)));
-    const pinnedOnly = Object.values(profiles)
-      .filter((p) => Boolean(p.is_pinned || p.isPinned) && !callPhones.has(String(p.phone)))
+    const profileOnly = Object.values(profiles)
+      .filter((p) => p.phone && !callPhones.has(String(p.phone)))
       .map((p) => {
         const count = Number(p.call_count || 0);
         return {
@@ -134,12 +134,12 @@ export default function CustomersPage() {
           calls: [],
           count,
           grade: grade(count),
-          isPinned: true,
+          isPinned: Boolean(p.is_pinned || p.isPinned),
           consentStatus: p.consent_status || p.consentStatus || 'pending',
         };
       });
 
-    return [...pinnedOnly, ...callCustomers]
+    return [...profileOnly, ...callCustomers]
       .sort((a, b) => Number(b.isPinned) - Number(a.isPinned) || b.count - a.count);
   }, [calls, profiles]);
 
