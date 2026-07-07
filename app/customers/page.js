@@ -78,7 +78,7 @@ export default function CustomersPage() {
       const sorted = [...list].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
       const name = list.map((c) => parseInfo(c).customer_name).find((n) => n && String(n).trim());
       return { phone, name: name || null, calls: sorted, count: list.length, grade: grade(list.length) };
-    }).sort((a, b) => b.count - a.count);
+    }).sort((a, b) => Number(b.isPinned) - Number(a.isPinned) || b.count - a.count);
   }, [calls]);
 
   const gradeCounts = useMemo(() => {
@@ -100,6 +100,20 @@ export default function CustomersPage() {
   }, [filteredCustomers, selectedPhone]);
 
   const customer = customers.find((c) => c.phone === selectedPhone) || null;
+
+  const togglePinned = async () => {
+    if (!customer) return;
+    const next = !customer.isPinned;
+    await customerApi.update(customer.phone, { is_pinned: next });
+    setProfiles((prev) => ({
+      ...prev,
+      [customer.phone]: { ...(prev[customer.phone] || {}), is_pinned: next, isPinned: next },
+    }));
+    setSelectedProfile((prev) => prev ? {
+      ...prev,
+      profile: { ...(prev.profile || {}), is_pinned: next, isPinned: next },
+    } : prev);
+  };
 
   // 고객 선택 시 그 고객 모든 통화의 메모/사진 일괄 로드
   useEffect(() => {
@@ -239,7 +253,7 @@ export default function CustomersPage() {
                     }`}
                   >
                     <div className="flex items-center justify-between gap-[6px]">
-                      <span className="text-[13px] font-bold text-[#343659] truncate">{c.name || c.phone}</span>
+                      <span className="text-[13px] font-bold text-[#343659] truncate">{c.isPinned ? '★ ' : ''}{c.name || c.phone}</span>
                       <span className="text-[11px] text-[#99a1b0] flex-none">{c.count}통화</span>
                        <span className={`text-[10px] px-[7px] py-[2px] rounded-full font-semibold flex-none ${consentCls(c.consentStatus)}`}>
                          {CONSENT_LABEL[c.consentStatus] || '대기'}
