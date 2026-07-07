@@ -325,10 +325,6 @@ export default function CustomersPage() {
             />
           </div>
 
-          <p className="text-[10px] text-[#99a1b0] px-[2px]">
-            VIP 20+ · 단골 10+ · 일반 2~9 · 신규 1
-          </p>
-
           <div className="flex flex-col gap-[8px] max-h-[calc(80vh-260px)] overflow-y-auto no-scrollbar">
             {loading ? (
               <div className="py-8 text-center text-[12px] text-[#99a1b0]">불러오는 중...</div>
