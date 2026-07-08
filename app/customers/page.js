@@ -49,18 +49,31 @@ const CONSENT_BADGE = {
 };
 function consentCls(status) { return CONSENT_BADGE[status] || CONSENT_BADGE.pending; }
 
+function useDebouncedValue(value, delay = 250) {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebounced(value), delay);
+    return () => window.clearTimeout(timer);
+  }, [value, delay]);
+  return debounced;
+}
+
 export default function CustomersPage() {
   const [calls, setCalls] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [filter, setFilter] = useState('all');
   const [query, setQuery] = useState('');
+  const debouncedQuery = useDebouncedValue(query, 250);
   const [selectedPhone, setSelectedPhone] = useState(null);
   const [profiles, setProfiles] = useState({});
   const [selectedProfile, setSelectedProfile] = useState(null);
   const [customerHistory, setCustomerHistory] = useState([]);
   const [consentBusy, setConsentBusy] = useState(false);
   const [consentMessage, setConsentMessage] = useState('');
+  const [customerMemoText, setCustomerMemoText] = useState('');
+  const [customerMemoImage, setCustomerMemoImage] = useState(null);
+  const [savingCustomerMemo, setSavingCustomerMemo] = useState(false);
 
   // 통화별 메모/사진 (callId -> {memo, photos, loading})
   const [notes, setNotes] = useState({});
@@ -68,6 +81,7 @@ export default function CustomersPage() {
   const [uploadingId, setUploadingId] = useState(null);
   const [zoomPhoto, setZoomPhoto] = useState(null);
   const photoInputRef = useRef(null);
+  const customerMemoPhotoInputRef = useRef(null);
   const uploadTargetRef = useRef(null);
 
   useEffect(() => {
@@ -152,16 +166,17 @@ export default function CustomersPage() {
   }, [customers]);
 
   const filteredCustomers = useMemo(() => {
-    const q = query.trim().toLowerCase();
+    const q = debouncedQuery.trim().toLowerCase();
     return customers
       .filter((c) => filter === 'all' || c.grade === filter)
       .filter((c) => !q || [c.name, c.phone].filter(Boolean).some((v) => String(v).toLowerCase().includes(q)));
-  }, [customers, filter, query]);
+  }, [customers, filter, debouncedQuery]);
 
   useEffect(() => {
+    if (query.trim() !== debouncedQuery.trim()) return;
     if (!filteredCustomers.length) { setSelectedPhone(null); return; }
     if (!filteredCustomers.some((c) => c.phone === selectedPhone)) setSelectedPhone(filteredCustomers[0].phone);
-  }, [filteredCustomers, selectedPhone]);
+  }, [filteredCustomers, selectedPhone, query, debouncedQuery]);
 
   const customer = customers.find((c) => c.phone === selectedPhone) || null;
 
@@ -179,27 +194,36 @@ export default function CustomersPage() {
     } : prev);
   };
 
+  async function loadCustomerData(phone) {
+    const [detailRes, historyRes] = await Promise.all([
+      customerApi.get(phone).catch(() => ({ data: {} })),
+      customerApi.history(phone).catch(() => ({ data: { items: [] } })),
+    ]);
+    return {
+      selectedProfile: {
+        profile: detailRes.data?.profile || {},
+        analysis: detailRes.data?.analysis || {},
+      },
+      customerHistory: historyRes.data?.items || [],
+    };
+  }
+
   useEffect(() => {
     if (!selectedPhone) {
       setSelectedProfile(null);
       setCustomerHistory([]);
       setConsentMessage('');
+      setCustomerMemoText('');
+      setCustomerMemoImage(null);
       return;
     }
 
     let alive = true;
     (async () => {
-      const [detailRes, historyRes] = await Promise.all([
-        customerApi.get(selectedPhone).catch(() => ({ data: {} })),
-        customerApi.history(selectedPhone).catch(() => ({ data: { items: [] } })),
-      ]);
+      const next = await loadCustomerData(selectedPhone);
       if (!alive) return;
-
-      setSelectedProfile({
-        profile: detailRes.data?.profile || {},
-        analysis: detailRes.data?.analysis || {},
-      });
-      setCustomerHistory(historyRes.data?.items || []);
+      setSelectedProfile(next.selectedProfile);
+      setCustomerHistory(next.customerHistory);
     })();
 
     return () => { alive = false; };
@@ -207,16 +231,17 @@ export default function CustomersPage() {
 
   // 고객 선택 시 그 고객 모든 통화의 메모/사진 일괄 로드
   useEffect(() => {
-    if (!customer) { setNotes({}); return; }
+    if (!customer) return;
     let alive = true;
-    const ids = customer.calls.map((c) => c.id);
+    const ids = customer.calls.slice(0, 20).map((c) => c.id);
     setNotes((prev) => {
       const n = { ...prev };
       ids.forEach((id) => { if (!n[id]) n[id] = { memo: '', photos: [], loading: true }; });
       return n;
     });
     (async () => {
-      await Promise.all(ids.map(async (id) => {
+      const missingIds = ids.filter((id) => !notes[id] || notes[id].loading);
+      await Promise.all(missingIds.map(async (id) => {
         try {
           const res = await notesApi.getNote(id);
           if (!alive) return;
@@ -228,7 +253,7 @@ export default function CustomersPage() {
       }));
     })();
     return () => { alive = false; };
-  }, [selectedPhone]); // eslint-disable-line
+  }, [selectedPhone, customer]); // eslint-disable-line
 
   const aiSummary = useMemo(() => {
     if (!customer) return '';
@@ -301,6 +326,34 @@ export default function CustomersPage() {
     }
   }
 
+  async function handleSaveCustomerMemo() {
+    if (!customer) return;
+    const memo = customerMemoText.trim();
+    if (!memo && !customerMemoImage) return;
+    setSavingCustomerMemo(true);
+    try {
+      const memoRes = await customerApi.createMemo(customer.phone, { memo: memo || '사진 메모' });
+      const memoId = memoRes.data?.id;
+      if (customerMemoImage && memoId) {
+        const up = await customerApi.requestMemoPhotoUpload(customer.phone, memoId, customerMemoImage.name);
+        const { photo_id, upload_url, s3_key, upload_headers } = up.data;
+        await notesApi.uploadPhotoToS3(upload_url, customerMemoImage, upload_headers);
+        await customerApi.saveMemoPhoto(customer.phone, memoId, { photo_id, s3_key });
+      }
+      setCustomerMemoText('');
+      setCustomerMemoImage(null);
+      if (customerMemoPhotoInputRef.current) customerMemoPhotoInputRef.current.value = '';
+      const next = await loadCustomerData(customer.phone);
+      setSelectedProfile(next.selectedProfile);
+      setCustomerHistory(next.customerHistory);
+    } catch (err) {
+      console.error(err);
+      alert(err.response?.data?.error || err.message || '고객 메모 저장 실패');
+    } finally {
+      setSavingCustomerMemo(false);
+    }
+  }
+
   async function handleCreateConsentLink(openSms = false) {
     if (!customer) return;
     setConsentBusy(true);
@@ -335,6 +388,13 @@ export default function CustomersPage() {
     top={<div className="h-[50px]" />}
   >
     <input ref={photoInputRef} type="file" accept="image/*" onChange={handlePhotoSelect} className="hidden" />
+    <input
+      ref={customerMemoPhotoInputRef}
+      type="file"
+      accept="image/*"
+      onChange={(e) => setCustomerMemoImage(e.target.files?.[0] || null)}
+      className="hidden"
+    />
 
       <div className="px-[24px] pt-[24px]">
         <p className="text-[13px] text-[#99a1b0]">고객별 통화 히스토리와 메모를 한 곳에서 관리하세요.</p>
@@ -443,6 +503,38 @@ export default function CustomersPage() {
                 </p>
               </div>
 
+              <div className="bg-white rounded-[16px] border border-[#eceef3] p-[16px]">
+                <div className="flex items-center justify-between">
+                  <span className="text-[13px] font-bold text-[#343659]">메모/이미지 추가</span>
+                  {customerMemoImage && (
+                    <span className="max-w-[160px] truncate text-[10px] text-[#7e7e7e]">{customerMemoImage.name}</span>
+                  )}
+                </div>
+                <textarea
+                  value={customerMemoText}
+                  onChange={(e) => setCustomerMemoText(e.target.value)}
+                  rows={3}
+                  placeholder="고객 히스토리에 남길 메모를 입력하세요"
+                  className="mt-[10px] w-full rounded-[10px] border border-[#d6d9e5] p-[10px] text-[12px] text-[#343659] placeholder:text-[#99a1b0] outline-none focus:border-[#1c6bd4] resize-none bg-white"
+                />
+                <div className="mt-[10px] flex items-center justify-end gap-[8px]">
+                  <button
+                    onClick={() => customerMemoPhotoInputRef.current?.click()}
+                    disabled={savingCustomerMemo}
+                    className="h-[32px] px-[12px] rounded-[8px] bg-[#f1f2f6] border border-[#dfe2e8] text-[#343659] text-[11px] font-semibold disabled:opacity-50"
+                  >
+                    이미지 선택
+                  </button>
+                  <button
+                    onClick={handleSaveCustomerMemo}
+                    disabled={savingCustomerMemo || (!customerMemoText.trim() && !customerMemoImage)}
+                    className="h-[32px] px-[14px] rounded-[8px] bg-[#343659] text-white text-[11px] font-semibold disabled:opacity-50"
+                  >
+                    {savingCustomerMemo ? '저장 중...' : '히스토리에 추가'}
+                  </button>
+                </div>
+              </div>
+
               {customerHistory.filter((x) => x.type === 'manual_memo').length > 0 && (
                 <div className="bg-white rounded-[16px] border border-[#eceef3] p-[16px]">
                   <div className="flex items-center justify-between">
@@ -484,7 +576,7 @@ export default function CustomersPage() {
                   {customer.calls.map((c) => {
                     const info = parseInfo(c);
                     const infoRows = [['분류', c.category], ['방문일정', [info.date, info.time].filter(Boolean).join(' ')]].filter(([, v]) => v);
-                    const note = notes[c.id] || { memo: '', photos: [], loading: true };
+                    const note = notes[c.id] || { memo: '', photos: [], loading: false };
                     return (
                       <div key={c.id} className="rounded-[12px] border border-[#eceef3] bg-white p-[14px] flex flex-col gap-[12px]">
                         {/* 통화 헤더 + 전체 요약 */}
