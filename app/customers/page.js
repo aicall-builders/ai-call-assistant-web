@@ -59,6 +59,8 @@ export default function CustomersPage() {
   const [profiles, setProfiles] = useState({});
   const [selectedProfile, setSelectedProfile] = useState(null);
   const [customerHistory, setCustomerHistory] = useState([]);
+  const [consentBusy, setConsentBusy] = useState(false);
+  const [consentMessage, setConsentMessage] = useState('');
 
   // 통화별 메모/사진 (callId -> {memo, photos, loading})
   const [notes, setNotes] = useState({});
@@ -181,6 +183,7 @@ export default function CustomersPage() {
     if (!selectedPhone) {
       setSelectedProfile(null);
       setCustomerHistory([]);
+      setConsentMessage('');
       return;
     }
 
@@ -298,6 +301,33 @@ export default function CustomersPage() {
     }
   }
 
+  async function handleCreateConsentLink(openSms = false) {
+    if (!customer) return;
+    setConsentBusy(true);
+    setConsentMessage('');
+    try {
+      const res = await customerApi.createConsentLink(customer.phone, {
+        name: customer.name || '',
+      });
+      const url = res.data?.consent_url || '';
+      if (!url) throw new Error('동의 URL을 생성하지 못했습니다.');
+
+      if (openSms) {
+        const body = encodeURIComponent(`개인정보 수집 및 AI 통화분석 동의서입니다.\n${url}`);
+        window.location.href = `sms:${customer.phone}?&body=${body}`;
+        setConsentMessage('개인 동의 URL로 문자앱을 열었습니다.');
+      } else {
+        await navigator.clipboard?.writeText(url);
+        setConsentMessage('개인 동의 URL을 생성하고 클립보드에 복사했습니다.');
+      }
+    } catch (err) {
+      console.error(err);
+      setConsentMessage(err.response?.data?.error || err.message || '동의 URL 생성 실패');
+    } finally {
+      setConsentBusy(false);
+    }
+  }
+
  return (
   <PageShell
     title="고객관리"
@@ -379,6 +409,26 @@ export default function CustomersPage() {
                   {customer.name && customer.name !== customer.phone && (
                     <span className="text-[13px] text-[#99a1b0]">{customer.phone}</span>
                   )}
+                  <span className={`text-[10px] px-[8px] py-[3px] rounded-full font-semibold ${consentCls(customer.consentStatus)}`}>
+                    {CONSENT_LABEL[customer.consentStatus] || '대기'}
+                  </span>
+                </div>
+                <div className="mt-[12px] flex flex-wrap gap-[8px] items-center">
+                  <button
+                    onClick={() => handleCreateConsentLink(false)}
+                    disabled={consentBusy}
+                    className="h-[32px] px-[12px] rounded-[8px] bg-[#f1f2f6] border border-[#dfe2e8] text-[#343659] text-[11px] font-semibold disabled:opacity-50"
+                  >
+                    개인 동의 URL 복사
+                  </button>
+                  <button
+                    onClick={() => handleCreateConsentLink(true)}
+                    disabled={consentBusy}
+                    className="h-[32px] px-[12px] rounded-[8px] bg-[#343659] text-white text-[11px] font-semibold disabled:opacity-50"
+                  >
+                    동의서 문자 발송
+                  </button>
+                  {consentMessage && <span className="text-[11px] text-[#7e7e7e]">{consentMessage}</span>}
                 </div>
               </div>
 
@@ -389,8 +439,8 @@ export default function CustomersPage() {
                   <span className="text-[10px] text-[#99a1b0]">통화 기록 기반</span>
                 </div>
                 <p className="mt-[10px] text-[12px] leading-[1.6] text-[#343659]">
-                   {customer.consentStatus === 'consented' ? aiSummary : '동의 완료 후 AI 고객 분석을 사용할 수 있습니다.'}
-                 </p>
+                  {customer.consentStatus === 'consented' ? aiSummary : '동의 완료 후 AI 고객 분석을 사용할 수 있습니다.'}
+                </p>
               </div>
 
               {customerHistory.filter((x) => x.type === 'manual_memo').length > 0 && (
@@ -404,13 +454,14 @@ export default function CustomersPage() {
                   <div className="mt-[10px] flex flex-col gap-[10px]">
                     {customerHistory.filter((x) => x.type === 'manual_memo').slice(0, 5).map((item) => (
                       <div key={item.id} className="rounded-[12px] bg-[#f7f8fb] p-[12px]">
-                        <p className="text-[12px] leading-[1.5] text-[#343659] whitespace-pre-wrap">
+                        <p className="mt-[6px] text-[12px] leading-[1.5] text-[#343659] whitespace-pre-wrap">
                           {item.memo || '메모 내용 없음'}
                         </p>
                         {item.photos?.length > 0 && (
                           <div className="mt-[8px] flex gap-[6px] flex-wrap">
                             {item.photos.slice(0, 5).map((photo) => (
                               <button key={photo.id} onClick={() => setZoomPhoto(photo.url)} className="w-[44px] h-[44px] rounded-[8px] overflow-hidden border border-[#eceef3]">
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
                                 <img src={photo.url} alt="메모 사진" className="w-full h-full object-cover" />
                               </button>
                             ))}

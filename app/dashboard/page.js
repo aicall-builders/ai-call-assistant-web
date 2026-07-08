@@ -162,7 +162,9 @@ export default function DashboardPage() {
       await loadAll();
     } catch (err) {
       console.error(err);
-      setError(err.response?.data?.error || err.response?.data?.message || err.message || '업로드 실패');
+      const data = err.response?.data || {};
+      const base = data.error || data.message || err.message || '업로드 실패';
+      setError(data.detail ? `${base}: ${data.detail}` : base);
     } finally {
       setUploading(false); e.target.value = '';
     }
