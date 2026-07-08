@@ -11,6 +11,7 @@ import Logo from '@/app/components/Logo';
 // 상수 (안드와 동일한 분류)
 // ──────────────────────────────────────────────────────
 const CALLER_CATEGORIES = [
+  { value: 'ALL',          label: '전체',   emoji: '📞' },
   { value: 'UNCLASSIFIED', label: '미분류', emoji: '📋' },
   { value: 'BUSINESS',     label: '업무',   emoji: '💼' },
   { value: 'PERSONAL',     label: '개인',   emoji: '👤' },
@@ -54,7 +55,7 @@ export default function DashboardPage() {
   const [successMsg, setSuccessMsg] = useState('');
 
   // UI 상태
-  const [selectedCategory, setSelectedCategory] = useState('UNCLASSIFIED');
+  const [selectedCategory, setSelectedCategory] = useState('ALL');
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
 
@@ -94,6 +95,14 @@ export default function DashboardPage() {
       setDataLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (!calls.some((c) => ['uploaded', 'processing', 'transcribed'].includes(c.status))) return;
+    const timer = window.setInterval(() => {
+      loadData();
+    }, 15000);
+    return () => window.clearInterval(timer);
+  }, [calls]);
 
   const handleLogout = async () => {
     await logout();
@@ -230,7 +239,7 @@ export default function DashboardPage() {
 
   // 카테고리별 카운트 (탭 배지용)
   const categoryCounts = useMemo(() => {
-    const counts = { UNCLASSIFIED: 0, BUSINESS: 0, PERSONAL: 0 };
+    const counts = { ALL: calls.length, UNCLASSIFIED: 0, BUSINESS: 0, PERSONAL: 0 };
     calls.forEach((c) => {
       const cat = c.caller_category || 'UNCLASSIFIED';
       if (counts[cat] !== undefined) counts[cat]++;
@@ -240,6 +249,7 @@ export default function DashboardPage() {
 
   // 선택된 카테고리의 통화만
   const filteredCalls = useMemo(() => {
+    if (selectedCategory === 'ALL') return calls;
     return calls.filter(
       (c) => (c.caller_category || 'UNCLASSIFIED') === selectedCategory
     );
