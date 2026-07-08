@@ -6,14 +6,39 @@ const API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL || "").replace(/\/$/,
 
 export default function ConsentPage() {
   const [token, setToken] = useState("");
+  const [consentInfo, setConsentInfo] = useState(null);
   const [status, setStatus] = useState("idle");
   const [message, setMessage] = useState("");
 
   useEffect(() => {
     const searchParams = new URLSearchParams(window.location.search);
-    setToken(searchParams.get("token") || "");
+    const nextToken = searchParams.get("token") || "";
+    setToken(nextToken);
   }, []);
 
+  useEffect(() => {
+    if (!token || !API_BASE_URL) return;
+
+    let alive = true;
+    (async () => {
+      setStatus("loading");
+      setMessage("");
+      try {
+        const res = await fetch(`${API_BASE_URL}/consent/${encodeURIComponent(token)}`);
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || "동의 정보를 불러오지 못했습니다.");
+        if (!alive) return;
+        setConsentInfo(data);
+        setStatus("idle");
+      } catch (err) {
+        if (!alive) return;
+        setStatus("error");
+        setMessage(err?.message || "동의 정보를 불러오지 못했습니다.");
+      }
+    })();
+
+    return () => { alive = false; };
+  }, [token]);
 
   const submitConsent = async (agreed) => {
     if (!token) {
@@ -38,10 +63,8 @@ export default function ConsentPage() {
           }),
         });
 
-        if (!res.ok) {
-          const text = await res.text().catch(() => "");
-          throw new Error(text || "동의 처리 실패");
-        }
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || "동의 처리 실패");
       } else {
         window.localStorage.setItem(
           `ai-call-consent:${token}`,
@@ -50,7 +73,7 @@ export default function ConsentPage() {
       }
 
       setStatus(agreed ? "accepted" : "declined");
-      setMessage(agreed ? "동의가 완료되었습니다." : "동의가 거절되었습니다.");
+      setMessage(agreed ? "동의가 완료되었습니다. 기존 통화와 이후 통화 분석에 동의 상태가 적용됩니다." : "비동의가 저장되었습니다. AI 분석 처리는 제한됩니다.");
     } catch (err) {
       setStatus("error");
       setMessage(err?.message || "처리 중 오류가 발생했습니다.");
@@ -66,24 +89,28 @@ export default function ConsentPage() {
           </div>
 
           <h1 className="text-2xl font-bold tracking-tight">
-            통화 녹음 분석 동의
+            개인정보 수집 및 AI 통화분석 동의
           </h1>
 
           <p className="mt-3 text-sm leading-6 text-slate-600">
-            통화 녹음 파일을 텍스트로 변환하고, 예약·주문·문의 내용을 구조화하기 위한 동의 화면입니다.
+            통화 녹음 파일을 텍스트로 변환하고, 고객 상담 내역을 요약·분석하기 위한 개인별 동의 화면입니다.
           </p>
 
           <div className="mt-4 rounded-xl bg-slate-50 p-3 text-xs text-slate-500">
-            동의 요청 정보가 확인되었습니다.
+            {consentInfo
+              ? `${consentInfo.customer_name || "고객"} / ${consentInfo.phone || ""}`
+              : token
+                ? "동의 요청 정보를 확인하는 중입니다."
+                : "동의 토큰이 없습니다."}
           </div>
         </section>
 
         <Section title="수집·이용 항목">
-          통화 녹음 파일, 통화 일시, 발신자 번호, STT 변환 텍스트, AI 요약 결과, 예약·주문·문의 등 구조화 정보
+          통화 녹음 파일, 통화 일시, 연락처, STT 변환 텍스트, AI 요약 결과, 고객 메모, 이미지 설명, 예약·주문·문의 등 구조화 정보
         </Section>
 
         <Section title="이용 목적">
-          통화 내용 텍스트 변환, 핵심 내용 요약, 예약·주문·변경·클레임 분류, 일정·후속 조치 정보 추출
+          통화 내용 텍스트 변환, 핵심 내용 요약, 고객 히스토리 관리, 예약·주문·변경·클레임 분류, 일정·후속 조치 정보 추출
         </Section>
 
         <Section title="보관 기간">
@@ -96,6 +123,10 @@ export default function ConsentPage() {
 
         <Section title="동의 철회">
           사용자는 언제든지 통화 데이터 삭제 및 AI 분석 동의 철회를 요청할 수 있습니다.
+        </Section>
+
+        <Section title="비동의 시 처리">
+          비동의하더라도 기본 연락처 확인과 필수 응대 기록은 유지될 수 있으나, AI 고객분석과 자동 녹음 분석 처리는 제한됩니다.
         </Section>
 
         {message && (

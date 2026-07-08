@@ -211,7 +211,9 @@ export default function StoreCallsPage() {
       await loadData();
     } catch (err) {
       console.error('업로드 실패:', err);
-      setError(err.response?.data?.message || err.message || '업로드 실패');
+      const data = err.response?.data || {};
+      const base = data.error || data.message || err.message || '업로드 실패';
+      setError(data.detail ? `${base}: ${data.detail}` : base);
     } finally {
       setUploading(false);
       setUploadProgress(0);
