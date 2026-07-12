@@ -1,5 +1,7 @@
 # FIANO Web
 
+Deployment URL: https://dsoh4vn0si08a.cloudfront.net/
+
 소상공인을 위한 AI 통화 요약 서비스 FIANO의 웹 관리자 화면입니다. 매장, 통화 내역, AI 요약, 고객 히스토리, 캘린더 연동 상태를 브라우저에서 관리합니다.
 
 ## 주요 기능
